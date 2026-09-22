@@ -1,0 +1,167 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    color: #1f2937;
+    background: #dfe5ec;
+  }
+
+  code, pre, .font-mono {
+    font-family: Consolas, "Courier New", monospace;
+  }
+}
+
+/* VideoFlow desktop download-manager skin: classic Windows/IDM-style,
+   with a dense toolbar, folder sidebar, table, status bar and dialogs. */
+.idm-shell {
+  background: #e8edf3 !important;
+  color: #1f2937 !important;
+  font-size: 13px;
+}
+
+.idm-shell button {
+  border-radius: 2px !important;
+}
+
+.idm-shell [class*="bg-[#0"],
+.idm-shell [class*="bg-[#1"],
+.idm-shell [class*="bg-[#2"],
+.idm-shell [class*="bg-slate-900"],
+.idm-shell [class*="bg-slate-800"],
+.idm-shell [class*="bg-slate-700"] {
+  background-color: #f5f7fa !important;
+}
+
+.idm-shell [class*="bg-slate-600"] {
+  background-color: #e6ebf1 !important;
+}
+
+.idm-shell [class*="text-slate-100"],
+.idm-shell [class*="text-slate-200"],
+.idm-shell [class*="text-slate-300"] {
+  color: #1f2937 !important;
+}
+
+.idm-shell [class*="text-slate-400"],
+.idm-shell [class*="text-slate-500"] {
+  color: #5b6573 !important;
+}
+
+.idm-shell [class*="text-slate-600"] {
+  color: #7b8490 !important;
+}
+
+.idm-shell [class*="border-slate-700"],
+.idm-shell [class*="border-slate-800"],
+.idm-shell [class*="border-slate-900"] {
+  border-color: #b8c2cd !important;
+}
+
+.idm-shell [class*="border-slate-700\/"],
+.idm-shell [class*="border-slate-800\/"] {
+  border-color: #c7ced7 !important;
+}
+
+/* Blue is the primary action/accent instead of an "AI" visual language. */
+.idm-shell [class*="bg-cyan-600"] {
+  background-color: #0b67b2 !important;
+}
+.idm-shell [class*="bg-cyan-500"] {
+  background-color: #1479c9 !important;
+}
+.idm-shell [class*="text-cyan-400"],
+.idm-shell [class*="text-cyan-300"],
+.idm-shell [class*="text-cyan-200"] {
+  color: #075ea5 !important;
+}
+.idm-shell [class*="border-cyan-"] {
+  border-color: #7aaed8 !important;
+}
+
+/* Native-looking top title/menu/toolbar surfaces. */
+.idm-shell > header,
+.idm-shell nav,
+.idm-shell [role="toolbar"] {
+  background: linear-gradient(#f9fafb, #e2e7ed) !important;
+  border-color: #aeb8c4 !important;
+}
+
+.idm-shell aside {
+  background: #edf1f5 !important;
+  border-color: #aeb8c4 !important;
+}
+
+.idm-shell input,
+.idm-shell select,
+.idm-shell textarea {
+  background: #fff !important;
+  color: #17202a !important;
+  border-color: #9da8b5 !important;
+  border-radius: 2px !important;
+}
+
+.idm-shell input:focus,
+.idm-shell select:focus,
+.idm-shell textarea:focus {
+  outline: 1px solid #3b82c4 !important;
+  border-color: #3b82c4 !important;
+}
+
+.idm-shell .idm-workspace {
+  background: #ffffff !important;
+}
+
+.idm-shell table {
+  background: #fff !important;
+}
+
+.idm-shell table thead {
+  background: linear-gradient(#f7f9fb, #dfe5eb) !important;
+}
+
+.idm-shell table th {
+  color: #263442 !important;
+  border-color: #b9c2cc !important;
+  font-weight: 600 !important;
+}
+
+.idm-shell table td {
+  color: #283645 !important;
+  border-color: #e0e4e8 !important;
+}
+
+.idm-shell table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.idm-shell table tbody tr:hover {
+  background: #e7f1fb !important;
+}
+
+.idm-shell [class*="rounded-xl"],
+.idm-shell [class*="rounded-lg"] {
+  border-radius: 3px !important;
+}
+
+/* Status bar / compact desktop feel */
+.idm-shell .font-mono {
+  font-family: Consolas, "Courier New", monospace !important;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: #e6ebf0;
+}
+::-webkit-scrollbar-thumb {
+  background: #b7c0ca;
+  border: 2px solid #e6ebf0;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8f9aa6;
+}

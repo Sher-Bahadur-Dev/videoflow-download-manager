@@ -1,0 +1,7 @@
+{
+  "name": "VideoFlow Download Manager",
+  "description": "Professional video download manager featuring real-time stream analysis, queue management, progress tracking, and format selection for authorized media.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
