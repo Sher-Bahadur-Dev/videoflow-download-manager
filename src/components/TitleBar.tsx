@@ -18,7 +18,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({ stats, connected, onOpenAddM
           <Download className="w-2.5 h-2.5 text-white stroke-[2.5]" />
         </div>
         <span className="font-semibold text-slate-200 tracking-tight text-[12px] truncate">
-          VideoFlow Download Manager
+          Free Download Manager (FDM High-Speed Edition)
         </span>
         {stats.activeCount > 0 && (
           <span className="hidden sm:inline-flex items-center space-x-1 px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/60 font-mono text-[10px]">

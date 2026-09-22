@@ -31,6 +31,9 @@ import { HistoryView } from './components/HistoryView';
 import { LogsView } from './components/LogsView';
 import { FilePreviewModal } from './components/FilePreviewModal';
 import { FolderRevealModal } from './components/FolderRevealModal';
+import { VideoPlayerView } from './components/VideoPlayerView';
+import { ArchiveManagerModal } from './components/ArchiveManagerModal';
+import { AudioExtractorModal } from './components/AudioExtractorModal';
 import { getCategory } from './utils';
 
 const DEFAULT_STATS: DashboardStats = {
@@ -93,10 +96,11 @@ export function App() {
   const [connected, setConnected] = useState(false);
 
   // View & Category navigation
-  const [mainView, setMainView] = useState<'downloads' | 'queue' | 'history' | 'logs' | 'settings'>('downloads');
+  const [mainView, setMainView] = useState<'downloads' | 'queue' | 'history' | 'logs' | 'settings' | 'grabber'>('downloads');
   const [currentFilter, setCurrentFilter] = useState<SidebarFilter>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [grabUrl, setGrabUrl] = useState<string>('');
 
   // Table selection, sorting & column visibility
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -121,6 +125,10 @@ export function App() {
   const [isColumnChooserOpen, setIsColumnChooserOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
+  const [archiveInitialItems, setArchiveInitialItems] = useState<DownloadItem[]>([]);
+  const [audioInitialItem, setAudioInitialItem] = useState<DownloadItem | null>(null);
 
   const [renameItem, setRenameItem] = useState<DownloadItem | null>(null);
   const [propertiesItem, setPropertiesItem] = useState<DownloadItem | null>(null);
@@ -132,6 +140,7 @@ export function App() {
     x: number;
     y: number;
     item: DownloadItem;
+    effectiveSelectedIds?: Set<string>;
   } | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -142,12 +151,39 @@ export function App() {
     fetchInitialData();
     connectEventSource();
 
+    // Check for grab URL in query parameters (e.g. from browser bookmarklet)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const grabParam = params.get('grab');
+      if (grabParam) {
+        setGrabUrl(decodeURIComponent(grabParam));
+        setMainView('grabber');
+        setCurrentFilter('view_grabber');
+      }
+    } catch {
+      // ignore
+    }
+
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }
     };
   }, []);
+
+  const handleQueueDownload = async (item: Partial<DownloadItem>) => {
+    const res = await fetch('/api/downloads', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to queue download');
+    }
+    const created = await res.json();
+    setDownloads((prev) => [created, ...prev]);
+  };
 
   // Save column visibility preferences
   useEffect(() => {
@@ -167,14 +203,67 @@ export function App() {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input/textarea
+      // F1 should work even if user is in an input field (standard Help shortcut)
+      if (e.key === 'F1') {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+        return;
+      }
+
+      // Don't trigger other shortcuts if user is typing in an input/textarea
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
         if (e.key === 'Escape') target.blur();
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+      // '?' key opens shortcuts cheat sheet
+      if (e.key === '?' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        setIsShortcutsOpen((prev) => !prev);
+        return;
+      }
+
+      // Alt + 1-6 view switching
+      if (e.altKey && !e.ctrlKey && !e.shiftKey) {
+        if (e.key === '1') {
+          e.preventDefault();
+          handleSelectSidebarFilter('all');
+          return;
+        } else if (e.key === '2') {
+          e.preventDefault();
+          handleSelectSidebarFilter('view_queue');
+          return;
+        } else if (e.key === '3') {
+          e.preventDefault();
+          handleSelectSidebarFilter('view_history');
+          return;
+        } else if (e.key === '4') {
+          e.preventDefault();
+          handleSelectSidebarFilter('view_grabber');
+          return;
+        } else if (e.key === '5') {
+          e.preventDefault();
+          handleSelectSidebarFilter('view_logs');
+          return;
+        } else if (e.key === '6') {
+          e.preventDefault();
+          handleSelectSidebarFilter('view_settings');
+          return;
+        }
+      }
+
+      // Quick key 'G' for grabber
+      if (e.key.toLowerCase() === 'g' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        handleSelectSidebarFilter('view_grabber');
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        handleSelectAll();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         setIsAddUrlOpen(true);
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
@@ -194,7 +283,7 @@ export function App() {
       } else if (e.key === 'Delete') {
         if (selectedIds.size > 0) {
           e.preventDefault();
-          handleBatchDelete(false);
+          handleBatchDelete(e.shiftKey);
         }
       } else if (e.key === ' ') {
         if (selectedIds.size === 1) {
@@ -205,6 +294,10 @@ export function App() {
             if (item.status === 'DOWNLOADING') handlePause(id);
             else handleResume(id);
           }
+        }
+      } else if (e.key === 'Escape') {
+        if (selectedIds.size > 0) {
+          handleClearSelection();
         }
       }
     };
@@ -311,6 +404,10 @@ export function App() {
       } catch (err) {
         console.error('SSE log error:', err);
       }
+    });
+
+    sse.addEventListener('logs_cleared', () => {
+      setLogs([]);
     });
   };
 
@@ -499,33 +596,44 @@ export function App() {
   };
 
   // Batch actions on selection
-  const handleBatchResume = async () => {
-    for (const id of selectedIds) {
+  const handleBatchResume = async (ids?: Set<string>) => {
+    const targets = ids || selectedIds;
+    for (const id of targets) {
       await handleResume(id);
     }
   };
 
-  const handleBatchPause = async () => {
-    for (const id of selectedIds) {
+  const handleBatchPause = async (ids?: Set<string>) => {
+    const targets = ids || selectedIds;
+    for (const id of targets) {
       await handlePause(id);
     }
   };
 
-  const handleBatchStop = async () => {
-    for (const id of selectedIds) {
+  const handleBatchStop = async (ids?: Set<string>) => {
+    const targets = ids || selectedIds;
+    for (const id of targets) {
       await handleCancel(id);
     }
   };
 
-  const handleBatchDelete = async (deleteFile = false) => {
+  const handleBatchRetry = async (ids?: Set<string>) => {
+    const targets = ids || selectedIds;
+    for (const id of targets) {
+      await handleRetry(id);
+    }
+  };
+
+  const handleBatchDelete = async (deleteFile = false, ids?: Set<string>) => {
+    const targets = ids || selectedIds;
     const confirmed = confirm(
-      `Remove ${selectedIds.size} selected download${selectedIds.size > 1 ? 's' : ''}${
+      `Remove ${targets.size} selected download${targets.size > 1 ? 's' : ''}${
         deleteFile ? ' AND delete file(s) from disk' : ''
       }?`
     );
     if (!confirmed) return;
 
-    for (const id of selectedIds) {
+    for (const id of targets) {
       await handleDelete(id, deleteFile);
     }
   };
@@ -655,6 +763,7 @@ export function App() {
     else if (filter === 'view_history') setMainView('history');
     else if (filter === 'view_logs') setMainView('logs');
     else if (filter === 'view_settings') setMainView('settings');
+    else if (filter === 'view_grabber') setMainView('grabber');
     else if (filter === 'view_scheduler') setIsSchedulerOpen(true);
     else {
       setMainView('downloads');
@@ -666,8 +775,12 @@ export function App() {
       else if (filter === 'paused') setSelectedCategory('status:PAUSED');
       else if (filter === 'cat_video') setSelectedCategory('video');
       else if (filter === 'cat_audio') setSelectedCategory('audio');
+      else if (filter === 'cat_compressed') setSelectedCategory('compressed');
+      else if (filter === 'cat_programs') setSelectedCategory('programs');
       else if (filter === 'cat_docs') setSelectedCategory('documents');
       else if (filter === 'cat_other') setSelectedCategory('other');
+      else if (filter === 'view_archive') setIsArchiveModalOpen(true);
+      else if (filter === 'view_audio_tool') setIsAudioModalOpen(true);
     }
   };
 
@@ -705,6 +818,8 @@ export function App() {
         onClearHistory={handleClearHistory}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         onOpenAbout={() => setIsAboutOpen(true)}
+        onOpenArchiveModal={() => setIsArchiveModalOpen(true)}
+        onOpenAudioModal={() => setIsAudioModalOpen(true)}
       />
 
       {/* 3. Utility Toolbar with Speed Limiter & Search */}
@@ -717,6 +832,12 @@ export function App() {
         onSpeedLimitChange={handleToggleSpeedLimit}
         onOpenAddUrl={() => setIsAddUrlOpen(true)}
         onOpenAddBatch={() => setIsAddBatchOpen(true)}
+        onOpenGrabber={() => {
+          setMainView('grabber');
+          setCurrentFilter('view_grabber');
+        }}
+        onOpenArchiveModal={() => setIsArchiveModalOpen(true)}
+        onOpenAudioModal={() => setIsAudioModalOpen(true)}
         onStartSelected={handleBatchResume}
         onPauseSelected={handleBatchPause}
         onStopSelected={handleBatchStop}
@@ -750,8 +871,16 @@ export function App() {
                   if (item.status === 'COMPLETED') handleOpenFile(item);
                   else setPropertiesItem(item);
                 }}
-                onContextMenu={(e, item) => {
-                  setContextMenu({ x: e.clientX, y: e.clientY, item });
+                onContextMenu={(e, item, effectiveSelection) => {
+                  if (effectiveSelection) {
+                    setSelectedIds(effectiveSelection);
+                  }
+                  setContextMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    item,
+                    effectiveSelectedIds: effectiveSelection || selectedIds
+                  });
                 }}
                 sortField={sortField}
                 sortDirection={sortDirection}
@@ -799,6 +928,15 @@ export function App() {
             </div>
           )}
 
+          {mainView === 'grabber' && (
+            <div className="flex-1 overflow-y-auto">
+              <VideoPlayerView
+                onQueueDownload={handleQueueDownload}
+                initialUrl={grabUrl}
+              />
+            </div>
+          )}
+
           {mainView === 'logs' && (
             <div className="flex-1 overflow-y-auto">
               <LogsView
@@ -837,24 +975,56 @@ export function App() {
       />
 
       {/* 6. Context Menu on Right-Click */}
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          item={contextMenu.item}
-          onClose={() => setContextMenu(null)}
-          onStart={handleResume}
-          onPause={handlePause}
-          onResume={handleResume}
-          onStop={handleCancel}
-          onRetry={handleRetry}
-          onOpenFile={handleOpenFile}
-          onOpenFolder={(item) => handleRevealFolder(item.id)}
-          onRename={(item) => setRenameItem(item)}
-          onDelete={handleDelete}
-          onProperties={(item) => setPropertiesItem(item)}
-        />
-      )}
+      {contextMenu && (() => {
+        const activeIds = contextMenu.effectiveSelectedIds || selectedIds;
+        const targetItems = downloads.filter((d) => activeIds.has(d.id));
+        const selectedCount = activeIds.size;
+
+        return (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            item={contextMenu.item}
+            selectedCount={selectedCount}
+            selectedItems={targetItems}
+            onClose={() => setContextMenu(null)}
+            onStart={handleResume}
+            onPause={handlePause}
+            onResume={handleResume}
+            onStop={handleCancel}
+            onRetry={handleRetry}
+            onOpenFile={handleOpenFile}
+            onOpenFolder={(item) => handleRevealFolder(item.id)}
+            onRename={(item) => setRenameItem(item)}
+            onDelete={handleDelete}
+            onProperties={(item) => setPropertiesItem(item)}
+            onOpenInGrabber={(url) => {
+              setGrabUrl(url);
+              setMainView('grabber');
+              setCurrentFilter('view_grabber');
+            }}
+            onCompress={(items) => {
+              setArchiveInitialItems(items);
+              setIsArchiveModalOpen(true);
+            }}
+            onExtract={(item) => {
+              setArchiveInitialItems([item]);
+              setIsArchiveModalOpen(true);
+            }}
+            onExtractAudio={(item) => {
+              setAudioInitialItem(item);
+              setIsAudioModalOpen(true);
+            }}
+            onBatchResume={() => handleBatchResume(activeIds)}
+            onBatchPause={() => handleBatchPause(activeIds)}
+            onBatchStop={() => handleBatchStop(activeIds)}
+            onBatchRetry={() => handleBatchRetry(activeIds)}
+            onBatchDelete={(deleteFile) => handleBatchDelete(deleteFile, activeIds)}
+            onSelectAll={handleSelectAll}
+            onClearSelection={handleClearSelection}
+          />
+        );
+      })()}
 
       {/* 7. Dialogs & Modals */}
       <AddUrlDialog
@@ -903,6 +1073,47 @@ export function App() {
       <ShortcutsDialog
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+        onOpenAddUrl={() => setIsAddUrlOpen(true)}
+        onOpenAddBatch={() => setIsAddBatchOpen(true)}
+        onFocusSearch={() => {
+          const el = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
+          if (el) el.focus();
+        }}
+        onOpenSettings={() => {
+          setMainView('settings');
+          setCurrentFilter('view_settings');
+        }}
+        onRefresh={fetchInitialData}
+        onTogglePauseResume={() => {
+          if (selectedIds.size === 1) {
+            const id = Array.from(selectedIds)[0];
+            const item = downloads.find((d) => d.id === id);
+            if (item) {
+              if (item.status === 'DOWNLOADING') handlePause(id);
+              else handleResume(id);
+            }
+          }
+        }}
+        onDeleteSelected={(deleteFile) => handleBatchDelete(deleteFile)}
+        onSelectAll={handleSelectAll}
+        onClearSelection={handleClearSelection}
+        onSwitchView={(view) => {
+          setMainView(view);
+          if (view === 'grabber') setCurrentFilter('view_grabber');
+          else if (view === 'history') setCurrentFilter('view_history');
+          else if (view === 'logs') setCurrentFilter('view_logs');
+          else if (view === 'queue') setCurrentFilter('view_queue');
+          else if (view === 'settings') setCurrentFilter('view_settings');
+          else setCurrentFilter('all');
+        }}
+        selectedCount={selectedIds.size}
+        selectedItemName={
+          selectedIds.size === 1
+            ? downloads.find((d) => d.id === Array.from(selectedIds)[0])?.title
+            : undefined
+        }
+        canTogglePauseResume={selectedIds.size === 1}
+        currentView={mainView}
       />
 
       <AboutDialog
@@ -915,11 +1126,36 @@ export function App() {
         item={previewItem}
         onClose={() => setPreviewItem(null)}
         onRevealFolder={handleRevealFolder}
+        onQueueDownload={handleQueueDownload}
       />
 
       <FolderRevealModal
         info={revealInfo}
         onClose={() => setRevealInfo(null)}
+      />
+
+      {/* Archive & Compression Manager Modal */}
+      <ArchiveManagerModal
+        isOpen={isArchiveModalOpen}
+        onClose={() => {
+          setIsArchiveModalOpen(false);
+          setArchiveInitialItems([]);
+        }}
+        completedDownloads={downloads.filter((d) => d.status === 'COMPLETED')}
+        initialSelectedItems={archiveInitialItems}
+        downloadDirectory={settings.downloadDirectory}
+        onRefreshDownloads={fetchInitialData}
+      />
+
+      {/* Audio Extractor & Demuxer Modal */}
+      <AudioExtractorModal
+        isOpen={isAudioModalOpen}
+        onClose={() => {
+          setIsAudioModalOpen(false);
+          setAudioInitialItem(null);
+        }}
+        initialItem={audioInitialItem}
+        onQueueDownload={handleQueueDownload}
       />
     </div>
   );

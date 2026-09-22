@@ -12,6 +12,27 @@ export function formatBytes(bytes?: number): string {
   return `${val.toFixed(val >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+export function formatExactKiloBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0 || isNaN(bytes)) return '0.0 KB';
+  const kb = bytes / 1024;
+  return `${kb.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KB`;
+}
+
+export function formatExactBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0 || isNaN(bytes)) return '0 B';
+  return `${bytes.toLocaleString('en-US')} B`;
+}
+
+export function formatBytesDetailed(downloaded?: number, total?: number): string {
+  const d = downloaded || 0;
+  const t = total || 0;
+  if (t > 0) {
+    const pct = ((d / t) * 100).toFixed(1);
+    return `${formatExactKiloBytes(d)} / ${formatExactKiloBytes(t)} (${pct}%)`;
+  }
+  return `${formatExactKiloBytes(d)} / Unknown`;
+}
+
 export function formatSpeed(bytesPerSec?: number): string {
   if (!bytesPerSec || bytesPerSec <= 0 || isNaN(bytesPerSec)) return '0 KB/s';
   if (bytesPerSec < 1024) return `${bytesPerSec.toFixed(0)} B/s`;
@@ -49,15 +70,40 @@ export function formatDate(isoString?: string): string {
 }
 
 export function getCategory(item: DownloadItem): CategoryType {
-  const ext = (item.format || (item.fileName ? item.fileName.split('.').pop() : '') || '').toLowerCase();
-  if (['mp4', 'webm', 'mkv', 'avi', 'mov', 'flv', 'wmv'].includes(ext)) {
+  if (item.isCompressedArchive) return 'compressed';
+  if (item.isAudioExtracted) return 'audio';
+
+  const ext = (
+    item.format ||
+    (item.fileName ? item.fileName.split('.').pop() : '') ||
+    (item.url ? item.url.split('?')[0].split('.').pop() : '') ||
+    ''
+  ).toLowerCase();
+
+  // Compressed Archives
+  if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'iso', 'dmg', 'tgz', 'xz', 'cab'].includes(ext)) {
+    return 'compressed';
+  }
+
+  // Programs & Binaries
+  if (['exe', 'msi', 'apk', 'bin', 'app', 'deb', 'rpm', 'sh', 'bat', 'cmd'].includes(ext)) {
+    return 'programs';
+  }
+
+  // Videos
+  if (['mp4', 'webm', 'mkv', 'avi', 'mov', 'flv', 'wmv', 'm4v', 'ts', '3gp'].includes(ext)) {
     return 'video';
   }
-  if (['mp3', 'm4a', 'wav', 'flac', 'aac', 'ogg', 'opus'].includes(ext)) {
+
+  // Audio
+  if (['mp3', 'm4a', 'wav', 'flac', 'aac', 'ogg', 'opus', 'wma', 'm4r'].includes(ext)) {
     return 'audio';
   }
-  if (['pdf', 'doc', 'docx', 'txt', 'epub', 'rtf', 'odt', 'csv', 'xlsx'].includes(ext)) {
+
+  // Documents
+  if (['pdf', 'doc', 'docx', 'txt', 'epub', 'rtf', 'odt', 'csv', 'xlsx', 'xls', 'pptx', 'ppt'].includes(ext)) {
     return 'documents';
   }
+
   return 'other';
 }

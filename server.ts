@@ -1,10 +1,12 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import archiver from 'archiver';
+import AdmZip from 'adm-zip';
 import { createServer as createViteServer } from 'vite';
 import { log, getLogs, clearLogs } from './server/logger';
 import { loadSettings, getSettings, saveSettings, resetSettings } from './server/storage/settings';
-import { loadDownloads, getAllDownloads, getDownloadById, clearCompleted, reorderDownloads } from './server/storage/history';
+import { loadDownloads, getAllDownloads, getDownloadById, clearCompleted, reorderDownloads, addDownload, deleteDownload, updateDownload } from './server/storage/history';
 import { analyzeVideo } from './server/analyzer/analyzer';
 import { downloadEngine } from './server/downloader/engine';
 import { DownloadItem, DownloadEvent } from './server/types';
@@ -18,12 +20,33 @@ async function startServer() {
   loadDownloads();
   log('INFO', 'VideoFlow Download Manager server initializing...');
 
+  // Ensure yt-dlp binary is executable
+  const ytdlpPath = path.join(process.cwd(), 'bin', 'yt-dlp');
+  if (fs.existsSync(ytdlpPath)) {
+    try {
+      fs.chmodSync(ytdlpPath, 0o755);
+    } catch (e: any) {
+      log('WARN', `Could not chmod yt-dlp binary: ${e.message}`);
+    }
+  }
+
   // Middleware
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
   // SSE client connections for real-time progress updates
   const sseClients = new Set<express.Response>();
+
+  const broadcastEvent = (type: string, data: any) => {
+    const payload = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(payload);
+      } catch {
+        sseClients.delete(client);
+      }
+    }
+  };
 
   downloadEngine.addEventListener((event: DownloadEvent) => {
     const payload = `data: ${JSON.stringify(event)}\n\n`;
@@ -380,8 +403,27 @@ async function startServer() {
     res.json(getLogs(limit, level, search));
   });
 
+  app.get('/api/logs/export', (req, res) => {
+    const all = getLogs(1000);
+    const text = all
+      .map(
+        (l) =>
+          `[${l.timestamp}] [${l.level.padEnd(5)}] ${l.message} ${
+            l.details ? JSON.stringify(l.details) : ''
+          }`
+      )
+      .join('\n');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="videoflow_logs_${Date.now()}.txt"`
+    );
+    res.send(text);
+  });
+
   app.delete('/api/logs', (req, res) => {
     clearLogs();
+    broadcastEvent('logs_cleared', { success: true });
     res.json({ success: true });
   });
 
@@ -448,7 +490,192 @@ async function startServer() {
     }
   });
 
-  // 11. Vite Middleware (Dev vs Prod)
+  // 11. Archive Management (Compress & Extract)
+  app.post('/api/archive/compress', async (req, res) => {
+    try {
+      const { fileIds, archiveName, level = 6 } = req.body;
+      if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
+        return res.status(400).json({ error: 'fileIds array is required' });
+      }
+
+      const settings = getSettings();
+      const outputDir = settings.downloadDirectory;
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      const cleanArchiveBase = (archiveName || `Archive_${Date.now()}`)
+        .replace(/[/\\?%*:|"<>]/g, '_')
+        .replace(/\.zip$/i, '');
+      const zipFileName = `${cleanArchiveBase}.zip`;
+      const zipFilePath = path.join(outputDir, zipFileName);
+
+      const itemsToZip: { path: string; name: string }[] = [];
+      for (const id of fileIds) {
+        const item = getDownloadById(id);
+        if (item && item.outputPath && fs.existsSync(item.outputPath)) {
+          itemsToZip.push({
+            path: item.outputPath,
+            name: path.basename(item.outputPath)
+          });
+        }
+      }
+
+      if (itemsToZip.length === 0) {
+        return res.status(404).json({ error: 'No existing downloaded files found for the given IDs' });
+      }
+
+      log('INFO', `Creating ZIP archive "${zipFileName}" with ${itemsToZip.length} files...`);
+
+      const output = fs.createWriteStream(zipFilePath);
+      const archive = archiver('zip', {
+        zlib: { level: Math.min(9, Math.max(0, level)) }
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        output.on('close', () => resolve());
+        archive.on('error', (err: any) => reject(err));
+        archive.pipe(output);
+
+        for (const f of itemsToZip) {
+          archive.file(f.path, { name: f.name });
+        }
+
+        archive.finalize();
+      });
+
+      const stat = fs.statSync(zipFilePath);
+      const zipItem: DownloadItem = {
+        id: `archive_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        url: `file://${zipFilePath}`,
+        title: zipFileName,
+        uploader: 'Free Download Manager (Archiver)',
+        thumbnail: '',
+        status: 'COMPLETED',
+        progress: 100,
+        downloadedBytes: stat.size,
+        totalBytes: stat.size,
+        speed: 0,
+        eta: 0,
+        quality: 'Compressed Archive',
+        format: 'zip',
+        outputPath: zipFilePath,
+        fileName: zipFileName,
+        createdAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        isCompressedArchive: true
+      };
+
+      addDownload(zipItem);
+      broadcastEvent('download_added', zipItem);
+      broadcastEvent('stats', downloadEngine.getStats());
+
+      log('INFO', `ZIP archive created successfully: ${zipFileName} (${stat.size} bytes)`);
+      res.json({ success: true, item: zipItem, size: stat.size, fileCount: itemsToZip.length });
+    } catch (err: any) {
+      log('ERROR', `Compression failed: ${err.message}`);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/archive/extract', (req, res) => {
+    try {
+      const { fileId, outputDir, deleteSource = false } = req.body;
+      const item = getDownloadById(fileId);
+      if (!item || !item.outputPath || !fs.existsSync(item.outputPath)) {
+        return res.status(404).json({ error: 'Archive file not found on disk' });
+      }
+
+      const zip = new AdmZip(item.outputPath);
+      const destDir = outputDir || path.join(path.dirname(item.outputPath), path.parse(item.outputPath).name);
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
+      }
+
+      zip.extractAllTo(destDir, true);
+      const entries = zip.getEntries();
+
+      if (deleteSource) {
+        try {
+          fs.unlinkSync(item.outputPath);
+          deleteDownload(item.id);
+          broadcastEvent('download_deleted', { id: item.id });
+        } catch (e: any) {
+          log('WARN', `Could not delete source archive: ${e.message}`);
+        }
+      }
+
+      log('INFO', `Extracted ${entries.length} items from "${item.title}" to ${destDir}`);
+      res.json({
+        success: true,
+        extractedTo: destDir,
+        entryCount: entries.length,
+        entries: entries.map(e => ({ name: e.entryName, isDirectory: e.isDirectory, size: e.header.size }))
+      });
+    } catch (err: any) {
+      log('ERROR', `Extraction failed: ${err.message}`);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/archive/inspect', (req, res) => {
+    try {
+      const { fileId } = req.body;
+      const item = getDownloadById(fileId);
+      if (!item || !item.outputPath || !fs.existsSync(item.outputPath)) {
+        return res.status(404).json({ error: 'Archive file not found' });
+      }
+
+      const zip = new AdmZip(item.outputPath);
+      const entries = zip.getEntries().map(e => ({
+        name: e.entryName,
+        isDirectory: e.isDirectory,
+        size: e.header.size,
+        compressedSize: e.header.compressedSize
+      }));
+
+      res.json({ success: true, fileName: item.fileName, entries });
+    } catch (err: any) {
+      res.status(500).json({ error: `Cannot inspect archive: ${err.message}` });
+    }
+  });
+
+  // 12. Audio Extractor & Direct Stream Tool
+  app.post('/api/audio/extract', async (req, res) => {
+    try {
+      const { url, title, format = 'mp3', quality = '320 kbps (High)' } = req.body;
+      if (!url) {
+        return res.status(400).json({ error: 'URL is required for audio extraction' });
+      }
+
+      const audioTitle = title || `Audio_${Date.now()}`;
+      const newItem: DownloadItem = {
+        id: `audio_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        url,
+        title: audioTitle,
+        uploader: 'Audio Extraction Engine',
+        thumbnail: '',
+        status: 'QUEUED',
+        progress: 0,
+        downloadedBytes: 0,
+        totalBytes: 0,
+        speed: 0,
+        eta: 0,
+        quality: quality || 'Audio High (320 kbps)',
+        format: format || 'mp3',
+        createdAt: new Date().toISOString(),
+        isAudioExtracted: true
+      };
+
+      await downloadEngine.queueDownload(newItem);
+      res.json(newItem);
+    } catch (err: any) {
+      log('ERROR', `Audio extraction failed: ${err.message}`);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 13. Vite Middleware (Dev vs Prod)
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

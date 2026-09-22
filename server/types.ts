@@ -35,6 +35,20 @@ export interface VideoMetadata {
   source: string; // 'youtube' | 'direct' | 'vimeo' | 'generic'
   availableFormats: FormatOption[];
   defaultFormatId?: string;
+  videoId?: string;
+  embedUrl?: string;
+  isRestricted?: boolean;
+  restrictionReason?: string;
+}
+
+export interface DownloadSegment {
+  id: number;
+  start: number;
+  end: number;
+  downloaded: number;
+  total: number;
+  speed: number;
+  status: 'connecting' | 'downloading' | 'completed' | 'idle';
 }
 
 export interface DownloadItem {
@@ -50,7 +64,7 @@ export interface DownloadItem {
   speed: number; // bytes per second
   eta: number; // seconds remaining
   quality: string; // e.g. "1080p"
-  format: string; // "mp4", "webm", "mp3"
+  format: string; // "mp4", "webm", "mp3", "zip"
   formatId?: string;
   outputPath?: string;
   fileName?: string;
@@ -59,6 +73,10 @@ export interface DownloadItem {
   completedAt?: string;
   error?: string;
   retryCount?: number;
+  segments?: DownloadSegment[];
+  connectionsCount?: number;
+  isCompressedArchive?: boolean;
+  isAudioExtracted?: boolean;
 }
 
 export interface AppSettings {

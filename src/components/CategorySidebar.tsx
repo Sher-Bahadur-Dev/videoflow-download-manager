@@ -15,7 +15,10 @@ import {
   Calendar,
   Terminal,
   Settings,
-  Folder
+  Folder,
+  Tv,
+  Archive,
+  Box
 } from 'lucide-react';
 import { DownloadItem, SidebarFilter } from '../types';
 import { getCategory } from '../utils';
@@ -43,6 +46,8 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
 
   const videoCount = downloads.filter(d => getCategory(d) === 'video').length;
   const audioCount = downloads.filter(d => getCategory(d) === 'audio').length;
+  const compressedCount = downloads.filter(d => getCategory(d) === 'compressed').length;
+  const programsCount = downloads.filter(d => getCategory(d) === 'programs').length;
   const docCount = downloads.filter(d => getCategory(d) === 'documents').length;
   const otherCount = downloads.filter(d => getCategory(d) === 'other').length;
 
@@ -102,6 +107,17 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
           </div>
         </div>
 
+        {/* MEDIA GRABBER Section */}
+        <div>
+          <div className="px-2 pb-1 text-[10px] font-semibold text-cyan-400 tracking-wider flex items-center justify-between">
+            <span>MEDIA GRABBER</span>
+            <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-950 text-cyan-300 font-mono border border-cyan-800/60">IDM Bar</span>
+          </div>
+          <div className="space-y-0.5">
+            {renderItem('view_grabber', 'Video Sniffer & Player', Tv, undefined, 'text-cyan-400')}
+          </div>
+        </div>
+
         {/* CATEGORIES Section */}
         <div>
           <div className="px-2 pb-1 text-[10px] font-semibold text-slate-400 tracking-wider">
@@ -110,6 +126,8 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
           <div className="space-y-0.5">
             {renderItem('cat_video', 'Video', Video, videoCount, 'text-cyan-400')}
             {renderItem('cat_audio', 'Audio', Music, audioCount, 'text-purple-400')}
+            {renderItem('cat_compressed', 'Compressed (ZIP)', Archive, compressedCount, 'text-emerald-400')}
+            {renderItem('cat_programs', 'Programs (.exe)', Box, programsCount, 'text-blue-400')}
             {renderItem('cat_docs', 'Documents', FileText, docCount, 'text-amber-400')}
             {renderItem('cat_other', 'Other', FileQuestion, otherCount, 'text-slate-400')}
           </div>
@@ -121,6 +139,8 @@ export const CategorySidebar: React.FC<CategorySidebarProps> = ({
             MANAGEMENT
           </div>
           <div className="space-y-0.5">
+            {renderItem('view_archive', 'Archive Manager (ZIP)', Archive, undefined, 'text-emerald-400')}
+            {renderItem('view_audio_tool', 'Audio Extractor', Music, undefined, 'text-purple-400')}
             {renderItem('view_queue', 'Queue Order', ListOrdered)}
             {renderItem('view_history', 'History Log', History)}
             {renderItem('view_scheduler', 'Scheduler', Calendar)}

@@ -44,6 +44,13 @@ export function loadSettings(): AppSettings {
     if (fs.existsSync(SETTINGS_FILE)) {
       const data = fs.readFileSync(SETTINGS_FILE, 'utf-8');
       currentSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(data) };
+      if (
+        !currentSettings.downloadDirectory ||
+        currentSettings.downloadDirectory.includes(':\\') ||
+        currentSettings.downloadDirectory.startsWith('C:')
+      ) {
+        currentSettings.downloadDirectory = DEFAULT_DOWNLOAD_DIR;
+      }
     } else {
       currentSettings = { ...DEFAULT_SETTINGS };
       fs.writeFileSync(SETTINGS_FILE, JSON.stringify(currentSettings, null, 2), 'utf-8');
@@ -62,7 +69,11 @@ export function saveSettings(newSettings: Partial<AppSettings>): { success: bool
   try {
     // Validate download directory
     if (newSettings.downloadDirectory) {
-      const sanitized = path.resolve(newSettings.downloadDirectory);
+      let targetDir = newSettings.downloadDirectory;
+      if (targetDir.includes(':\\') || targetDir.startsWith('C:')) {
+        targetDir = DEFAULT_DOWNLOAD_DIR;
+      }
+      const sanitized = path.resolve(targetDir);
       ensureDirectory(sanitized);
       newSettings.downloadDirectory = sanitized;
     }

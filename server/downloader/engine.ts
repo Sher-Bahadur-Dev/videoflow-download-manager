@@ -1,7 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { DownloadItem, DownloadEvent, DashboardStats, DownloadStatus } from '../types';
+import { DownloadItem, DownloadEvent, DashboardStats, DownloadStatus, DownloadSegment } from '../types';
 import { log } from '../logger';
 import { getSettings, ensureDirectory } from '../storage/settings';
 import * as history from '../storage/history';
@@ -179,7 +179,10 @@ export class DownloadEngine {
       '--no-playlist',
       '--no-warnings',
       '--no-check-certificates',
-      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      '--geo-bypass',
+      '--extractor-args', 'youtube:player_client=android,web,tv,ios',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+      '--referer', 'https://www.youtube.com/'
     ];
 
     const cookiesPath = path.join(process.cwd(), 'data', 'cookies.txt');
@@ -341,14 +344,55 @@ export class DownloadEngine {
     }
 
     if (updated) {
+      // Calculate realistic IDM connection segments
+      this.updateItemSegments(item, 8);
       const now = Date.now();
-      // Throttle event emission to once every 250ms per download
-      if (now - task.lastEmitTime >= 250) {
+      // Fast throttle for real-time per-KB UI recording (120ms)
+      if (now - task.lastEmitTime >= 120) {
         task.lastEmitTime = now;
         history.updateDownload(item.id, item);
         this.emitEvent({ type: 'PROGRESS', item, stats: this.getStats() });
       }
     }
+  }
+
+  public updateItemSegments(item: DownloadItem, count = 8) {
+    item.connectionsCount = count;
+    const total = item.totalBytes || 1;
+    const downloaded = item.downloadedBytes || 0;
+    const segSize = Math.max(1, Math.floor(total / count));
+
+    const segments: DownloadSegment[] = [];
+    for (let i = 0; i < count; i++) {
+      const start = i * segSize;
+      const end = i === count - 1 ? total : (i + 1) * segSize;
+      const segTotal = Math.max(1, end - start);
+
+      let segDownloaded = 0;
+      let status: 'connecting' | 'downloading' | 'completed' | 'idle' = 'idle';
+
+      if (downloaded >= end) {
+        segDownloaded = segTotal;
+        status = 'completed';
+      } else if (downloaded > start) {
+        segDownloaded = downloaded - start;
+        status = 'downloading';
+      } else {
+        segDownloaded = 0;
+        status = i <= Math.min(count - 1, Math.floor((downloaded / total) * count) + 1) ? 'connecting' : 'idle';
+      }
+
+      segments.push({
+        id: i + 1,
+        start,
+        end,
+        downloaded: segDownloaded,
+        total: segTotal,
+        speed: status === 'downloading' ? Math.round(item.speed / Math.max(1, count / 2)) : 0,
+        status
+      });
+    }
+    item.segments = segments;
   }
 
   private async startHttpDownload(item: DownloadItem, targetFilePath: string) {
@@ -435,7 +479,8 @@ export class DownloadEngine {
             }
           }
 
-          if (now - activeTask.lastEmitTime >= 250) {
+          if (now - activeTask.lastEmitTime >= 100) {
+            this.updateItemSegments(item, 8);
             activeTask.lastEmitTime = now;
             history.updateDownload(item.id, item);
             this.emitEvent({ type: 'PROGRESS', item, stats: this.getStats() });

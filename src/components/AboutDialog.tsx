@@ -15,7 +15,7 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => 
         <div className="h-9 bg-[#0b101c] px-3.5 flex items-center justify-between border-b border-slate-800 text-slate-300 select-none">
           <div className="flex items-center space-x-2">
             <Download className="w-4 h-4 text-cyan-400" />
-            <span className="font-semibold text-slate-100 text-xs">About VideoFlow</span>
+            <span className="font-semibold text-slate-100 text-xs">About Free Download Manager</span>
           </div>
           <button
             onClick={onClose}
@@ -30,25 +30,29 @@ export const AboutDialog: React.FC<AboutDialogProps> = ({ isOpen, onClose }) => 
             <Download className="w-6 h-6 text-white stroke-[2.5]" />
           </div>
           <div>
-            <h3 className="font-bold text-base text-slate-100">VideoFlow Download Manager</h3>
-            <p className="text-[11px] text-cyan-400 font-mono mt-0.5">Version 2.4.0 (Windows Native Edition)</p>
+            <h3 className="font-bold text-base text-slate-100">Free Download Manager</h3>
+            <p className="text-[11px] text-cyan-400 font-mono mt-0.5">Version 6.22 (IDM Turbo Edition)</p>
           </div>
           <p className="text-[11px] text-slate-400 leading-relaxed max-w-sm mx-auto">
-            High-performance desktop video transfer orchestrator with real-time stream demuxing, queue scheduling, and speed throttling.
+            High-speed multi-threaded download orchestrator with 8-connection segmentation, instant audio demuxing, integrated archive compression (.zip), and real-time KB progress recording.
           </p>
 
           <div className="p-2.5 bg-slate-900/90 rounded border border-slate-800 text-left space-y-1 text-[10px] font-mono text-slate-400">
             <div className="flex justify-between">
-              <span>Engine:</span>
-              <span className="text-slate-300">yt-dlp + Node.js Streaming Runtime</span>
+              <span>Acceleration Engine:</span>
+              <span className="text-slate-300">IDM 8-Thread Multi-Segment Pipeline</span>
             </div>
             <div className="flex justify-between">
-              <span>IPC / Stream:</span>
-              <span className="text-slate-300">Server-Sent Events (SSE)</span>
+              <span>Streaming Demuxer:</span>
+              <span className="text-slate-300">yt-dlp Native Streaming + Archiver</span>
             </div>
             <div className="flex justify-between">
-              <span>Cookie Mode:</span>
-              <span className="text-slate-300">Netscape HTTP cookies.txt</span>
+              <span>Progress Resolution:</span>
+              <span className="text-slate-300">High-Precision Per-KB Live Ledger</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Archive Engine:</span>
+              <span className="text-slate-300">ZIP Compression (Archiver) & Extraction (AdmZip)</span>
             </div>
           </div>
         </div>

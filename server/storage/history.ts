@@ -92,6 +92,8 @@ export function removeDownload(id: string, deleteFile = false): boolean {
   return true;
 }
 
+export const deleteDownload = removeDownload;
+
 export function clearCompleted(): number {
   const initial = downloads.length;
   downloads = downloads.filter(d => d.status !== 'COMPLETED');

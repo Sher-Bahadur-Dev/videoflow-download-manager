@@ -9,7 +9,11 @@ import {
   Settings,
   Search,
   SlidersHorizontal,
-  Gauge
+  Gauge,
+  Tv,
+  Music,
+  Archive,
+  FileArchive
 } from 'lucide-react';
 import { DownloadItem } from '../types';
 
@@ -22,6 +26,9 @@ interface ToolbarProps {
   onSpeedLimitChange: (kbps: number) => void;
   onOpenAddUrl: () => void;
   onOpenAddBatch: () => void;
+  onOpenGrabber?: () => void;
+  onOpenArchiveModal?: () => void;
+  onOpenAudioModal?: () => void;
   onStartSelected: () => void;
   onPauseSelected: () => void;
   onStopSelected: () => void;
@@ -39,6 +46,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onSpeedLimitChange,
   onOpenAddUrl,
   onOpenAddBatch,
+  onOpenGrabber,
+  onOpenArchiveModal,
+  onOpenAudioModal,
   onStartSelected,
   onPauseSelected,
   onStopSelected,
@@ -79,6 +89,42 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <ListPlus className="w-3.5 h-3.5 text-cyan-400" />
           <span className="text-[11px] whitespace-nowrap hidden sm:inline">Add Batch</span>
         </button>
+
+        {/* Video Sniffer (IDM Bar) */}
+        {onOpenGrabber && (
+          <button
+            onClick={onOpenGrabber}
+            title="Open Video Sniffer & Player with IDM Bar"
+            className="flex items-center space-x-1.5 px-2 py-1.5 rounded bg-cyan-950/60 hover:bg-cyan-900/60 text-cyan-200 border border-cyan-700/60 transition-colors cursor-pointer"
+          >
+            <Tv className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[11px] font-medium whitespace-nowrap hidden lg:inline">IDM Video Bar</span>
+          </button>
+        )}
+
+        {/* Audio Extractor */}
+        {onOpenAudioModal && (
+          <button
+            onClick={onOpenAudioModal}
+            title="Extract audio from any video/audio stream URL"
+            className="flex items-center space-x-1.5 px-2 py-1.5 rounded bg-purple-950/60 hover:bg-purple-900/60 text-purple-200 border border-purple-700/60 transition-colors cursor-pointer"
+          >
+            <Music className="w-3.5 h-3.5 text-purple-400" />
+            <span className="text-[11px] font-medium whitespace-nowrap hidden lg:inline">Audio Extract</span>
+          </button>
+        )}
+
+        {/* Archive / Compress */}
+        {onOpenArchiveModal && (
+          <button
+            onClick={onOpenArchiveModal}
+            title="Compress files into ZIP or extract archives"
+            className="flex items-center space-x-1.5 px-2 py-1.5 rounded bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/60 transition-colors cursor-pointer"
+          >
+            <Archive className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[11px] whitespace-nowrap hidden lg:inline">Compress/Zip</span>
+          </button>
+        )}
 
         <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
 

@@ -7,9 +7,21 @@ export type DownloadStatus =
   | 'FAILED'
   | 'CANCELLED';
 
-export type CategoryType = 'all' | 'video' | 'audio' | 'documents' | 'other';
+export type CategoryType = 'all' | 'video' | 'audio' | 'documents' | 'compressed' | 'programs' | 'other';
 
-export type ActiveTab = 'dashboard' | 'downloads' | 'queue' | 'history' | 'logs' | 'settings';
+export type ActiveTab = 'dashboard' | 'downloads' | 'queue' | 'history' | 'logs' | 'settings' | 'grabber';
+
+export type MainView = 'downloads' | 'queue' | 'history' | 'logs' | 'settings' | 'grabber' | 'archive' | 'audio_tool';
+
+export interface DownloadSegment {
+  id: number;
+  start: number;
+  end: number;
+  downloaded: number;
+  total: number;
+  speed: number;
+  status: 'connecting' | 'downloading' | 'completed' | 'idle';
+}
 
 export interface FormatOption {
   formatId: string;
@@ -22,6 +34,8 @@ export interface FormatOption {
   hasVideo: boolean;
   hasAudio: boolean;
   fps?: number;
+  vcodec?: string;
+  acodec?: string;
 }
 
 export interface VideoMetadata {
@@ -37,6 +51,10 @@ export interface VideoMetadata {
   source: string;
   availableFormats: FormatOption[];
   defaultFormatId?: string;
+  videoId?: string;
+  embedUrl?: string;
+  isRestricted?: boolean;
+  restrictionReason?: string;
 }
 
 export interface DownloadItem {
@@ -61,6 +79,10 @@ export interface DownloadItem {
   completedAt?: string;
   error?: string;
   retryCount?: number;
+  segments?: DownloadSegment[];
+  connectionsCount?: number;
+  isCompressedArchive?: boolean;
+  isAudioExtracted?: boolean;
 }
 
 export interface AppSettings {
@@ -114,15 +136,20 @@ export type SidebarFilter =
   | 'completed'
   | 'failed'
   | 'paused'
+  | 'view_grabber'
   | 'cat_video'
   | 'cat_audio'
   | 'cat_docs'
+  | 'cat_compressed'
+  | 'cat_programs'
   | 'cat_other'
   | 'view_queue'
   | 'view_history'
   | 'view_scheduler'
   | 'view_logs'
-  | 'view_settings';
+  | 'view_settings'
+  | 'view_archive'
+  | 'view_audio_tool';
 
 export type SortField = 'title' | 'status' | 'totalBytes' | 'progress' | 'downloadedBytes' | 'speed' | 'eta' | 'createdAt' | 'completedAt' | 'format';
 export type SortDirection = 'asc' | 'desc';

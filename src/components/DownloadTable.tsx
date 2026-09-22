@@ -11,7 +11,9 @@ import {
   FileQuestion,
   ChevronUp,
   ChevronDown,
-  ArrowUpDown
+  ArrowUpDown,
+  Archive,
+  Box
 } from 'lucide-react';
 import {
   DownloadItem,
@@ -21,6 +23,7 @@ import {
 } from '../types';
 import {
   formatBytes,
+  formatExactKiloBytes,
   formatSpeed,
   formatEta,
   formatDate,
@@ -34,7 +37,7 @@ interface DownloadTableProps {
   onSelectAll: () => void;
   onClearSelection: () => void;
   onRowDoubleClick: (item: DownloadItem) => void;
-  onContextMenu: (e: React.MouseEvent, item: DownloadItem) => void;
+  onContextMenu: (e: React.MouseEvent, item: DownloadItem, effectiveSelection?: Set<string>) => void;
   sortField: SortField;
   sortDirection: SortDirection;
   onSort: (field: SortField) => void;
@@ -48,8 +51,8 @@ export const ALL_COLUMNS: ColumnDefinition[] = [
   { id: 'category', label: 'Category', defaultVisible: true, sortable: true, width: 'w-20' },
   { id: 'status', label: 'Status', defaultVisible: true, sortable: true, width: 'w-28' },
   { id: 'size', label: 'Size', defaultVisible: true, sortable: true, width: 'w-24' },
-  { id: 'progress', label: 'Progress', defaultVisible: true, sortable: true, width: 'w-36' },
-  { id: 'downloaded', label: 'Downloaded', defaultVisible: true, sortable: true, width: 'w-24' },
+  { id: 'progress', label: 'Progress', defaultVisible: true, sortable: true, width: 'w-40' },
+  { id: 'downloaded', label: 'Downloaded', defaultVisible: true, sortable: true, width: 'w-28' },
   { id: 'speed', label: 'Speed', defaultVisible: true, sortable: true, width: 'w-24' },
   { id: 'eta', label: 'ETA', defaultVisible: true, sortable: true, width: 'w-20' },
   { id: 'date', label: 'Date Added', defaultVisible: true, sortable: true, width: 'w-36' },
@@ -97,6 +100,10 @@ export const DownloadTable: React.FC<DownloadTableProps> = ({
         return <Video className="w-3 h-3 text-cyan-400" />;
       case 'audio':
         return <Music className="w-3 h-3 text-purple-400" />;
+      case 'compressed':
+        return <Archive className="w-3 h-3 text-emerald-400" />;
+      case 'programs':
+        return <Box className="w-3 h-3 text-blue-400" />;
       case 'documents':
         return <FileText className="w-3 h-3 text-amber-400" />;
       default:
@@ -289,10 +296,11 @@ export const DownloadTable: React.FC<DownloadTableProps> = ({
                 onDoubleClick={() => onRowDoubleClick(item)}
                 onContextMenu={(e) => {
                   e.preventDefault();
+                  const effective = isSelected ? selectedIds : new Set([item.id]);
                   if (!isSelected) {
                     onToggleSelect(item.id);
                   }
-                  onContextMenu(e, item);
+                  onContextMenu(e, item, effective);
                 }}
                 className={`h-9 px-2 flex items-center transition-colors cursor-pointer text-[12px] group ${
                   isSelected
@@ -396,10 +404,10 @@ export const DownloadTable: React.FC<DownloadTableProps> = ({
 
                 {/* Progress (compact 6px bar + text) */}
                 {visibleColumns.progress !== false && (
-                  <div className="w-36 px-2 flex items-center space-x-2 shrink-0">
+                  <div className="w-40 px-2 flex items-center space-x-1.5 shrink-0">
                     <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
                       <div
-                        className={`h-full transition-all duration-300 ${
+                        className={`h-full transition-all duration-150 ${
                           isCompleted
                             ? 'bg-emerald-500'
                             : isFailed
@@ -409,7 +417,12 @@ export const DownloadTable: React.FC<DownloadTableProps> = ({
                         style={{ width: `${Math.min(100, Math.max(0, item.progress))}%` }}
                       />
                     </div>
-                    <span className="w-10 text-right font-mono text-[11px] text-slate-300 shrink-0">
+                    {isDownloading && (
+                      <span className="text-[9px] px-1 py-0.1 bg-cyan-950 text-cyan-300 font-mono rounded border border-cyan-800/60 hidden xl:inline shrink-0">
+                        8 conns
+                      </span>
+                    )}
+                    <span className="w-9 text-right font-mono text-[11px] text-slate-300 shrink-0">
                       {item.progress.toFixed(0)}%
                     </span>
                   </div>
@@ -417,8 +430,8 @@ export const DownloadTable: React.FC<DownloadTableProps> = ({
 
                 {/* Downloaded */}
                 {visibleColumns.downloaded !== false && (
-                  <div className="w-24 px-2 hidden lg:flex items-center justify-end shrink-0 font-mono text-[11px] text-slate-400 text-right">
-                    {formatBytes(item.downloadedBytes)}
+                  <div className="w-28 px-2 hidden lg:flex items-center justify-end shrink-0 font-mono text-[11px] text-slate-300 text-right">
+                    {formatExactKiloBytes(item.downloadedBytes)}
                   </div>
                 )}
 

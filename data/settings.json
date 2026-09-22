@@ -1,5 +1,5 @@
 {
-  "downloadDirectory": "C:\\Users\\Sher Bahadur\\Downloads\\videoflow-download-manager\\downloads",
+  "downloadDirectory": "downloads",
   "maxConcurrentDownloads": 3,
   "retryCount": 3,
   "retryDelay": 5,

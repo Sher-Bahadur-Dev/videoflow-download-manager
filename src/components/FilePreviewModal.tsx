@@ -1,23 +1,64 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Film, Music, Download, FolderOpen, CheckCircle2 } from 'lucide-react';
-import { DownloadItem } from '../types';
+import { DownloadItem, VideoMetadata, FormatOption } from '../types';
 import { formatBytes } from '../utils';
+import { IdmVideoBar } from './IdmVideoBar';
 
 interface FilePreviewModalProps {
   item: DownloadItem | null;
   onClose: () => void;
   onRevealFolder: (id: string) => void;
+  onQueueDownload?: (item: Partial<DownloadItem>) => Promise<void>;
 }
 
 export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   item,
   onClose,
-  onRevealFolder
+  onRevealFolder,
+  onQueueDownload
 }) => {
+  const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  useEffect(() => {
+    if (item?.url) {
+      setIsAnalyzing(true);
+      fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: item.url })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.availableFormats) {
+            setMetadata(data);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsAnalyzing(false));
+    } else {
+      setMetadata(null);
+    }
+  }, [item?.url]);
+
   if (!item) return null;
 
   const streamUrl = `/api/downloads/${item.id}/file`;
   const isAudio = item.format === 'mp3' || item.format === 'm4a';
+
+  const handleDownloadAlternateFormat = async (format: FormatOption, meta: VideoMetadata) => {
+    if (onQueueDownload) {
+      await onQueueDownload({
+        url: meta.url,
+        title: `${meta.title} (${format.resolution})`,
+        uploader: meta.uploader,
+        thumbnail: meta.thumbnail,
+        quality: format.resolution,
+        format: format.ext,
+        formatId: format.formatId
+      });
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in duration-150">
@@ -43,7 +84,17 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
         </div>
 
         {/* Player Media Container */}
-        <div className="bg-black/90 flex items-center justify-center p-2 min-h-[260px] max-h-[460px]">
+        <div className="relative bg-black/90 flex items-center justify-center p-2 min-h-[260px] max-h-[460px] overflow-hidden">
+          {/* Overlaid IDM Bar on Video Preview */}
+          {!isAudio && (
+            <IdmVideoBar
+              metadata={metadata}
+              isLoading={isAnalyzing}
+              onDownloadFormat={handleDownloadAlternateFormat}
+              position="top-right"
+            />
+          )}
+
           {isAudio ? (
             <div className="p-8 text-center space-y-4 w-full max-w-md">
               <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mx-auto">

@@ -28,6 +28,8 @@ interface MenuBarProps {
   onClearHistory: () => void;
   onOpenShortcuts: () => void;
   onOpenAbout: () => void;
+  onOpenArchiveModal?: () => void;
+  onOpenAudioModal?: () => void;
 }
 
 export const MenuBar: React.FC<MenuBarProps> = ({
@@ -53,7 +55,9 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onClearCompleted,
   onClearHistory,
   onOpenShortcuts,
-  onOpenAbout
+  onOpenAbout,
+  onOpenArchiveModal,
+  onOpenAudioModal
 }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const menuBarRef = useRef<HTMLDivElement>(null);
@@ -226,12 +230,19 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           View
         </button>
         {activeMenu === 'view' && (
-          <div className="absolute left-0 top-full mt-0.5 w-48 bg-[#121929] border border-slate-700 rounded-xs shadow-xl py-1 z-50 text-slate-200">
+          <div className="absolute left-0 top-full mt-0.5 w-52 bg-[#121929] border border-slate-700 rounded-xs shadow-xl py-1 z-50 text-slate-200">
             <button
               onClick={() => handleItemClick(() => onSelectFilter('all'))}
               className="w-full text-left px-3 py-1 hover:bg-cyan-900/40 hover:text-cyan-200"
             >
               All Downloads
+            </button>
+            <button
+              onClick={() => handleItemClick(() => onSelectFilter('view_grabber'))}
+              className="w-full text-left px-3 py-1 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between"
+            >
+              <span>Video Sniffer & Player</span>
+              <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-950 text-cyan-300 font-mono">IDM Bar</span>
             </button>
             <button
               onClick={() => handleItemClick(() => onSelectFilter('view_queue'))}
@@ -271,7 +282,33 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           Tools
         </button>
         {activeMenu === 'tools' && (
-          <div className="absolute left-0 top-full mt-0.5 w-56 bg-[#121929] border border-slate-700 rounded-xs shadow-xl py-1 z-50 text-slate-200">
+          <div className="absolute left-0 top-full mt-0.5 w-60 bg-[#121929] border border-slate-700 rounded-xs shadow-xl py-1 z-50 text-slate-200">
+            <button
+              onClick={() => handleItemClick(() => onSelectFilter('view_grabber'))}
+              className="w-full text-left px-3 py-1 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between"
+            >
+              <span>Capture Streams (IDM Bar)</span>
+              <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-950 text-cyan-300 font-mono">Sniffer</span>
+            </button>
+            {onOpenAudioModal && (
+              <button
+                onClick={() => handleItemClick(onOpenAudioModal)}
+                className="w-full text-left px-3 py-1 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between"
+              >
+                <span>Audio Extractor & Converter...</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-purple-950 text-purple-300 font-mono">Audio</span>
+              </button>
+            )}
+            {onOpenArchiveModal && (
+              <button
+                onClick={() => handleItemClick(onOpenArchiveModal)}
+                className="w-full text-left px-3 py-1 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between"
+              >
+                <span>Archive Manager (ZIP)...</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950 text-emerald-300 font-mono">Archive</span>
+              </button>
+            )}
+            <div className="h-px bg-slate-800 my-1" />
             <button
               onClick={() => handleItemClick(onOpenSettings)}
               className="w-full text-left px-3 py-1 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between"
@@ -320,9 +357,10 @@ export const MenuBar: React.FC<MenuBarProps> = ({
           <div className="absolute left-0 top-full mt-0.5 w-48 bg-[#121929] border border-slate-700 rounded-xs shadow-xl py-1 z-50 text-slate-200">
             <button
               onClick={() => handleItemClick(onOpenShortcuts)}
-              className="w-full text-left px-3 py-1 hover:bg-cyan-900/40 hover:text-cyan-200"
+              className="w-full text-left px-3 py-1 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between"
             >
-              Keyboard Shortcuts
+              <span>Keyboard Shortcuts</span>
+              <kbd className="text-[10px] text-cyan-400 font-mono bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">F1</kbd>
             </button>
             <div className="h-px bg-slate-800 my-1" />
             <button

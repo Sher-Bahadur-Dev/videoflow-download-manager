@@ -67,7 +67,8 @@ export const AddUrlDialog: React.FC<AddUrlDialogProps> = ({
 
   if (!isOpen) return null;
 
-const handleGetInfo = async () => {
+  const handleGetInfo = async () => {
+    const trimmed = url.trim();
     if (!trimmed) {
       setError('Please paste or type a media URL.');
       return;

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { VideoMetadata, FormatOption } from '../types';
 
-interface UrlGet InforModalProps {
+interface UrlAnalyzerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddDownload: (item: {
@@ -47,7 +47,7 @@ const SAMPLE_URLS = [
   }
 ];
 
-export const UrlGet InforModal: React.FC<UrlGet InforModalProps> = ({
+export const UrlAnalyzerModal: React.FC<UrlAnalyzerModalProps> = ({
   isOpen,
   onClose,
   onAddDownload
@@ -65,9 +65,9 @@ export const UrlGet InforModal: React.FC<UrlGet InforModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleGetInfo = async (targetUrl?: string) => {
-    const toGet Info = (targetUrl || url).trim();
-    if (!toGet Info) {
+  const handleAnalyze = async (targetUrl?: string) => {
+    const toAnalyze = (targetUrl || url).trim();
+    if (!toAnalyze) {
       setError('Please enter a valid video URL.');
       return;
     }
@@ -80,7 +80,7 @@ export const UrlGet InforModal: React.FC<UrlGet InforModalProps> = ({
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: toGet Info })
+        body: JSON.stringify({ url: toAnalyze })
       });
 
       const data = await res.json();
@@ -167,7 +167,7 @@ export const UrlGet InforModal: React.FC<UrlGet InforModalProps> = ({
                   type="text"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleGetInfo()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
                   placeholder="https://www.youtube.com/watch?v=... or direct MP4 URL"
                   className="w-full px-3 py-2 pl-9 bg-slate-900 border border-slate-700/80 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
                 />
@@ -175,7 +175,7 @@ export const UrlGet InforModal: React.FC<UrlGet InforModalProps> = ({
               </div>
               <button
                 id="btn-analyze-url"
-                onClick={() => handleGetInfo()}
+                onClick={() => handleAnalyze()}
                 disabled={analyzing || !url.trim()}
                 className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-medium rounded-lg flex items-center space-x-1.5 transition-colors cursor-pointer shadow-sm"
               >
@@ -187,7 +187,7 @@ export const UrlGet InforModal: React.FC<UrlGet InforModalProps> = ({
                 ) : (
                   <>
                     <Search className="w-3.5 h-3.5" />
-                    <span>Get Info</span>
+                    <span>Analyze</span>
                   </>
                 )}
               </button>
@@ -202,7 +202,7 @@ export const UrlGet InforModal: React.FC<UrlGet InforModalProps> = ({
                 key={sample.name}
                 onClick={() => {
                   setUrl(sample.url);
-                  handleGetInfo(sample.url);
+                  handleAnalyze(sample.url);
                 }}
                 className="text-[10px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-cyan-300 border border-slate-700/60 transition-colors cursor-pointer"
               >
