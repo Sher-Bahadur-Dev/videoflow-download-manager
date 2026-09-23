@@ -20,15 +20,29 @@ export const IdmSegmentBar: React.FC<IdmSegmentBarProps> = ({
   speed = 0,
   isDownloading = false
 }) => {
-  // If segments aren't populated from server, generate 8 default segments
   const activeSegments: DownloadSegment[] = React.useMemo(() => {
     if (segments && segments.length > 0) return segments;
 
-    const count = connectionsCount || 8;
-    const total = totalBytes || 1024 * 1024 * 10;
+    const count = connectionsCount || 1;
+    const total = totalBytes || 1;
     const downloaded = downloadedBytes || 0;
-    const segSize = Math.max(1, Math.floor(total / count));
 
+    if (count === 1) {
+      const isDone = total > 0 && downloaded >= total;
+      return [
+        {
+          id: 1,
+          start: 0,
+          end: total,
+          downloaded,
+          total,
+          speed,
+          status: isDone ? 'completed' : isDownloading ? 'downloading' : 'idle'
+        }
+      ];
+    }
+
+    const segSize = Math.max(1, Math.floor(total / count));
     const list: DownloadSegment[] = [];
     for (let i = 0; i < count; i++) {
       const start = i * segSize;

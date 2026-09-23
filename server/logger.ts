@@ -19,6 +19,13 @@ function formatLogLine(entry: LogEntry): string {
   return `${entry.timestamp} [${entry.level}] ${entry.message} ${entry.details ? JSON.stringify(entry.details) : ''}\n`;
 }
 
+const logListeners: Set<(entry: LogEntry) => void> = new Set();
+
+export function onLog(listener: (entry: LogEntry) => void) {
+  logListeners.add(listener);
+  return () => logListeners.delete(listener);
+}
+
 export function log(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string, details?: Record<string, any>) {
   const entry: LogEntry = {
     id: 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
@@ -36,6 +43,13 @@ export function log(level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG', message: string,
   // Console output
   const color = level === 'ERROR' ? '\x1b[31m' : level === 'WARN' ? '\x1b[33m' : level === 'DEBUG' ? '\x1b[90m' : '\x1b[32m';
   console.log(`${color}[${entry.level}]\x1b[0m ${entry.timestamp} ${message}`);
+
+  // Notify listeners
+  for (const listener of logListeners) {
+    try {
+      listener(entry);
+    } catch {}
+  }
 
   // Async append to file
   try {

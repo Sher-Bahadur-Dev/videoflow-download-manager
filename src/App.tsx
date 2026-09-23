@@ -7,7 +7,8 @@ import {
   LogEntry,
   SortField,
   SortDirection,
-  SidebarFilter
+  SidebarFilter,
+  MainView
 } from './types';
 import { TitleBar } from './components/TitleBar';
 import { MenuBar } from './components/MenuBar';
@@ -96,7 +97,7 @@ export function App() {
   const [connected, setConnected] = useState(false);
 
   // View & Category navigation
-  const [mainView, setMainView] = useState<'downloads' | 'queue' | 'history' | 'logs' | 'settings' | 'grabber'>('downloads');
+  const [mainView, setMainView] = useState<MainView>('downloads');
   const [currentFilter, setCurrentFilter] = useState<SidebarFilter>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -353,12 +354,23 @@ export function App() {
       }
     });
 
+    const updateItemInState = (raw: any) => {
+      const item = raw?.item || raw;
+      if (!item || !item.id) return;
+      setDownloads((prev) => {
+        const exists = prev.find((d) => d.id === item.id);
+        if (exists) {
+          return prev.map((d) => (d.id === item.id ? { ...d, ...item } : d));
+        }
+        return [item, ...prev];
+      });
+    };
+
     sse.addEventListener('progress', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        setDownloads((prev) =>
-          prev.map((d) => (d.id === data.id ? { ...d, ...data } : d))
-        );
+        updateItemInState(data);
+        if (data.stats) setStats(data.stats);
       } catch (err) {
         console.error('SSE progress error:', err);
       }
@@ -367,15 +379,68 @@ export function App() {
     sse.addEventListener('status', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        setDownloads((prev) => {
-          const exists = prev.find((d) => d.id === data.id);
-          if (exists) {
-            return prev.map((d) => (d.id === data.id ? { ...d, ...data } : d));
-          }
-          return [data, ...prev];
-        });
+        updateItemInState(data);
       } catch (err) {
         console.error('SSE status error:', err);
+      }
+    });
+
+    sse.addEventListener('status_change', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        updateItemInState(data);
+        if (data.stats) setStats(data.stats);
+      } catch (err) {
+        console.error('SSE status_change error:', err);
+      }
+    });
+
+    sse.addEventListener('completed', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        updateItemInState(data);
+        if (data.stats) setStats(data.stats);
+      } catch (err) {
+        console.error('SSE completed error:', err);
+      }
+    });
+
+    sse.addEventListener('added', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        updateItemInState(data);
+        if (data.stats) setStats(data.stats);
+      } catch (err) {
+        console.error('SSE added error:', err);
+      }
+    });
+
+    sse.addEventListener('download_added', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        updateItemInState(data);
+      } catch (err) {
+        console.error('SSE download_added error:', err);
+      }
+    });
+
+    sse.addEventListener('removed', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.stats) setStats(data.stats);
+      } catch (err) {
+        console.error('SSE removed error:', err);
+      }
+    });
+
+    sse.addEventListener('download_deleted', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.id) {
+          setDownloads((prev) => prev.filter((d) => d.id !== data.id));
+        }
+      } catch (err) {
+        console.error('SSE download_deleted error:', err);
       }
     });
 
@@ -1141,9 +1206,8 @@ export function App() {
           setIsArchiveModalOpen(false);
           setArchiveInitialItems([]);
         }}
-        completedDownloads={downloads.filter((d) => d.status === 'COMPLETED')}
-        initialSelectedItems={archiveInitialItems}
-        downloadDirectory={settings.downloadDirectory}
+        downloads={downloads}
+        selectedIds={new Set(archiveInitialItems.map((d) => d.id))}
         onRefreshDownloads={fetchInitialData}
       />
 
@@ -1154,8 +1218,9 @@ export function App() {
           setIsAudioModalOpen(false);
           setAudioInitialItem(null);
         }}
-        initialItem={audioInitialItem}
-        onQueueDownload={handleQueueDownload}
+        initialUrl={audioInitialItem?.url || ''}
+        initialTitle={audioInitialItem?.title || ''}
+        onAudioQueued={fetchInitialData}
       />
     </div>
   );

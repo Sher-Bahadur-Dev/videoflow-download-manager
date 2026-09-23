@@ -227,7 +227,7 @@ function createYouTubeFallbackMetadata(
       formatId: 'bestvideo+bestaudio/best',
       resolution: 'Best Available (Auto)',
       ext: 'mp4',
-      filesizeFormatted: '~45 MB',
+      filesizeFormatted: 'Unknown',
       note: 'Adaptive Multi-Client Stream (Best Video + Audio)',
       hasVideo: true,
       hasAudio: true
@@ -236,7 +236,7 @@ function createYouTubeFallbackMetadata(
       formatId: 'bestvideo[height<=2160]+bestaudio/best',
       resolution: '4K Ultra HD (2160p)',
       ext: 'mp4',
-      filesizeFormatted: '~320 MB',
+      filesizeFormatted: 'Unknown',
       note: '3840x2160 UHD • 60fps',
       hasVideo: true,
       hasAudio: true,
@@ -246,7 +246,7 @@ function createYouTubeFallbackMetadata(
       formatId: 'bestvideo[height<=1440]+bestaudio/best',
       resolution: '1440p Quad HD (2K)',
       ext: 'mp4',
-      filesizeFormatted: '~150 MB',
+      filesizeFormatted: 'Unknown',
       note: '2560x1440 QHD • 60fps',
       hasVideo: true,
       hasAudio: true,
@@ -256,7 +256,7 @@ function createYouTubeFallbackMetadata(
       formatId: 'bestvideo[height<=1080]+bestaudio/best',
       resolution: '1080p Full HD',
       ext: 'mp4',
-      filesizeFormatted: '~65 MB',
+      filesizeFormatted: 'Unknown',
       note: '1920x1080 FHD • High Bitrate',
       hasVideo: true,
       hasAudio: true
@@ -265,7 +265,7 @@ function createYouTubeFallbackMetadata(
       formatId: 'bestvideo[height<=720]+bestaudio/best',
       resolution: '720p HD',
       ext: 'mp4',
-      filesizeFormatted: '~32 MB',
+      filesizeFormatted: 'Unknown',
       note: '1280x720 HD • Standard',
       hasVideo: true,
       hasAudio: true
@@ -274,7 +274,7 @@ function createYouTubeFallbackMetadata(
       formatId: 'bestvideo[height<=480]+bestaudio/best',
       resolution: '480p SD',
       ext: 'mp4',
-      filesizeFormatted: '~18 MB',
+      filesizeFormatted: 'Unknown',
       note: '854x480 SD • Efficient',
       hasVideo: true,
       hasAudio: true
@@ -283,7 +283,7 @@ function createYouTubeFallbackMetadata(
       formatId: '18',
       resolution: '360p Medium (Direct MP4)',
       ext: 'mp4',
-      filesizeFormatted: '~12 MB',
+      filesizeFormatted: 'Unknown',
       note: '640x360 Legacy Progressive Stream',
       hasVideo: true,
       hasAudio: true
@@ -292,7 +292,7 @@ function createYouTubeFallbackMetadata(
       formatId: 'bestaudio/best',
       resolution: 'Audio Only (MP3 320k)',
       ext: 'mp3',
-      filesizeFormatted: '~8.5 MB',
+      filesizeFormatted: 'Unknown',
       note: 'High-Fidelity Stereo Audio Extracted',
       hasVideo: false,
       hasAudio: true
@@ -301,7 +301,7 @@ function createYouTubeFallbackMetadata(
       formatId: 'bestaudio[ext=m4a]/bestaudio',
       resolution: 'Audio Only (M4A AAC)',
       ext: 'm4a',
-      filesizeFormatted: '~5.2 MB',
+      filesizeFormatted: 'Unknown',
       note: 'Native 128kbps AAC Audio',
       hasVideo: false,
       hasAudio: true
@@ -425,7 +425,7 @@ function processYtDlpOutput(url: string, raw: any, source: string, ytId?: string
     formatId: 'bestaudio/best',
     resolution: 'Audio (MP3 / 320 kbps)',
     ext: 'mp3',
-    filesizeFormatted: duration ? formatBytes(duration * 40000) : '~8 MB',
+    filesizeFormatted: 'Unknown',
     note: 'High fidelity audio track',
     hasVideo: false,
     hasAudio: true
@@ -435,7 +435,7 @@ function processYtDlpOutput(url: string, raw: any, source: string, ytId?: string
     formatId: 'bestaudio[ext=m4a]/bestaudio',
     resolution: 'Audio (M4A / AAC)',
     ext: 'm4a',
-    filesizeFormatted: duration ? formatBytes(duration * 16000) : '~4 MB',
+    filesizeFormatted: 'Unknown',
     note: 'Native AAC audio stream',
     hasVideo: false,
     hasAudio: true
