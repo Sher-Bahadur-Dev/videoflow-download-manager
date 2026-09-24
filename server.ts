@@ -1,57 +1,43 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
-import { ZipArchive } from 'archiver';
+import crypto from 'crypto';
+import * as archiverModule from 'archiver';
+const archiver: any = (archiverModule as any).default || archiverModule;
 import AdmZip from 'adm-zip';
-import { log, getLogs, clearLogs, onLog } from './server/logger';
+import { createServer as createViteServer } from 'vite';
+import { log, getLogs, clearLogs } from './server/logger';
+import { loadSettings, getSettings, saveSettings, resetSettings } from './server/storage/settings';
+import { loadDownloads, getAllDownloads, getDownloadById, clearCompleted, reorderDownloads, addDownload, deleteDownload, updateDownload } from './server/storage/history';
 import { analyzeVideo } from './server/analyzer/analyzer';
 import { downloadEngine } from './server/downloader/engine';
-import {
-  loadSettings,
-  saveSettings,
-  getSettings,
-  resetSettings,
-  verifyAndResolveDirectory
-} from './server/storage/settings';
-import {
-  loadDownloads,
-  getAllDownloads,
-  getDownloadById,
-  addDownload,
-  updateDownload,
-  removeDownload,
-  deleteDownload,
-  clearCompleted,
-  clearHistory,
-  reorderDownloads,
-  renameDownload,
-  sanitizeFilename
-} from './server/storage/history';
 import { DownloadItem, DownloadEvent } from './server/types';
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
 
-  // Initialize persistent data layers and audit existing downloads
+  // Initialize storage
   loadSettings();
   loadDownloads();
+  log('INFO', 'VideoFlow Download Manager server initializing...');
 
-  app.use((_req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range');
-    if (_req.method === 'OPTIONS') {
-      return res.sendStatus(200);
+  // Ensure yt-dlp binary is executable
+  const ytdlpPath = path.join(process.cwd(), 'bin', 'yt-dlp');
+  if (fs.existsSync(ytdlpPath)) {
+    try {
+      fs.chmodSync(ytdlpPath, 0o755);
+    } catch (e: any) {
+      log('WARN', `Could not chmod yt-dlp binary: ${e.message}`);
     }
-    next();
-  });
-  app.use(express.json({ limit: '20mb' }));
+  }
+
+  // Middleware
+  app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Keep track of connected SSE clients
-  const sseClients: Set<express.Response> = new Set();
+  // SSE client connections for real-time progress updates
+  const sseClients = new Set<express.Response>();
 
   const broadcastEvent = (type: string, data: any) => {
     const payload = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -64,31 +50,16 @@ async function startServer() {
     }
   };
 
-  // Wire DownloadEngine events directly to SSE clients
   downloadEngine.addEventListener((event: DownloadEvent) => {
-    const eventName = event.type.toLowerCase();
-    const itemData = event.item || event;
-    const namedPayload = `event: ${eventName}\ndata: ${JSON.stringify(itemData)}\n\n`;
-    const genericPayload = `event: message\ndata: ${JSON.stringify(event)}\n\n`;
-
+    const payload = `data: ${JSON.stringify(event)}\n\n`;
     for (const client of sseClients) {
       try {
-        client.write(namedPayload);
-        client.write(genericPayload);
+        client.write(payload);
       } catch {
         sseClients.delete(client);
       }
     }
   });
-
-  // Forward internal logger messages to connected SSE clients
-  onLog((entry) => {
-    broadcastEvent('log', entry);
-  });
-
-  // ==========================================
-  // API ROUTES
-  // ==========================================
 
   // 1. SSE Events Endpoint
   app.get('/api/events', (req, res) => {
@@ -99,19 +70,9 @@ async function startServer() {
 
     sseClients.add(res);
 
-    // Send complete initial snapshot on connect
+    // Send initial snapshot
     const initialStats = downloadEngine.getStats();
-    const allDownloads = getAllDownloads();
-    const settings = getSettings();
-    const initPayload = JSON.stringify({
-      type: 'INIT',
-      downloads: allDownloads,
-      stats: initialStats,
-      settings: settings
-    });
-
-    res.write(`event: init\ndata: ${initPayload}\n\n`);
-    res.write(`data: ${initPayload}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'INIT', stats: initialStats })}\n\n`);
 
     req.on('close', () => {
       sseClients.delete(res);
@@ -162,7 +123,7 @@ async function startServer() {
         quality: quality || 'Best Available',
         format: format || 'mp4',
         formatId: formatId || 'bestvideo+bestaudio/best',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
       };
 
       await downloadEngine.queueDownload(item);
@@ -212,9 +173,8 @@ async function startServer() {
   app.post('/api/downloads/:id/rename', (req, res) => {
     const { newTitle } = req.body;
     if (!newTitle || typeof newTitle !== 'string') {
-      return res.status(400).json({ error: 'newTitle is required' });
+      return res.status(400).json({ error: 'New title is required' });
     }
-
     const updated = downloadEngine.renameJob(req.params.id, newTitle);
     if (updated) {
       res.json(updated);
@@ -223,33 +183,64 @@ async function startServer() {
     }
   });
 
-  // Batch queuing
-  app.post('/api/downloads/batch', async (req, res) => {
+  app.post('/api/downloads/batch-rename', (req, res) => {
     try {
-      const { urls, format = 'mp4', quality = 'Best Available' } = req.body;
-      if (!Array.isArray(urls) || urls.length === 0) {
-        return res.status(400).json({ error: 'Array of URLs is required' });
+      const { renames } = req.body;
+      if (!Array.isArray(renames) || renames.length === 0) {
+        return res.status(400).json({ error: 'renames array is required' });
       }
 
-      const queuedList: DownloadItem[] = [];
+      const updatedItems: DownloadItem[] = [];
+      for (const r of renames) {
+        if (r && r.id && typeof r.newTitle === 'string' && r.newTitle.trim()) {
+          const updated = downloadEngine.renameJob(r.id, r.newTitle.trim());
+          if (updated) {
+            updatedItems.push(updated);
+          }
+        }
+      }
+
+      log('INFO', `Batch renamed ${updatedItems.length} download items`);
+      res.json({ success: true, count: updatedItems.length, items: updatedItems });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/downloads/batch', async (req, res) => {
+    try {
+      const { urls, quality, format } = req.body;
+      if (!Array.isArray(urls) || urls.length === 0) {
+        return res.status(400).json({ error: 'URLs array is required' });
+      }
+
+      const addedItems: DownloadItem[] = [];
       for (const rawUrl of urls) {
-        const u = typeof rawUrl === 'string' ? rawUrl.trim() : rawUrl?.url?.trim();
+        const u = typeof rawUrl === 'string' ? rawUrl.trim() : '';
         if (!u) continue;
 
-        let parsedTitle = 'Download ' + new Date().toISOString().slice(11, 19);
+        let title = path.basename(new URL(u).pathname) || 'Media Download';
+        let uploader = 'Web Media';
+        let thumb = '';
+
         try {
-          const urlObj = new URL(u);
-          const pathBase = path.basename(urlObj.pathname);
-          if (pathBase) parsedTitle = pathBase;
-        } catch {}
+          const meta = await analyzeVideo(u);
+          if (meta) {
+            title = meta.title;
+            uploader = meta.uploader;
+            thumb = meta.thumbnail;
+          }
+        } catch {
+          // fallback to URL basename
+        }
 
         const id = 'dl_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
         const item: DownloadItem = {
           id,
           url: u,
-          title: parsedTitle,
-          uploader: 'Batch Queue',
-          thumbnail: '',
+          title: title.replace(/[<>:"/\\|?*]/g, '_').trim(),
+          uploader,
+          thumbnail: thumb,
           status: 'QUEUED',
           progress: 0,
           downloadedBytes: 0,
@@ -263,12 +254,12 @@ async function startServer() {
         };
 
         await downloadEngine.queueDownload(item);
-        queuedList.push(item);
+        addedItems.push(item);
       }
 
-      res.status(201).json({ success: true, count: queuedList.length, items: queuedList });
+      res.status(201).json({ success: true, count: addedItems.length, items: addedItems });
     } catch (err: any) {
-      log('ERROR', `Batch queue failed: ${err.message}`);
+      log('ERROR', `Batch download error: ${err.message}`);
       res.status(500).json({ error: err.message });
     }
   });
@@ -282,9 +273,9 @@ async function startServer() {
 
   app.post('/api/downloads/import', (req, res) => {
     try {
-      const items = req.body.items || req.body.downloads || (Array.isArray(req.body) ? req.body : []);
+      const { items } = req.body;
       if (!Array.isArray(items)) {
-        return res.status(400).json({ error: 'Expected items or downloads array' });
+        return res.status(400).json({ error: 'Expected items array' });
       }
       let importedCount = 0;
       for (const raw of items) {
@@ -302,7 +293,7 @@ async function startServer() {
           importedCount++;
         }
       }
-      res.json({ success: true, count: importedCount, imported: importedCount });
+      res.json({ success: true, count: importedCount });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -320,29 +311,20 @@ async function startServer() {
 
   app.post('/api/downloads/clear-completed', (req, res) => {
     const count = clearCompleted();
-    broadcastEvent('stats', downloadEngine.getStats());
     res.json({ success: true, count });
-  });
-
-  app.post('/api/history/clear', (req, res) => {
-    const count = clearHistory();
-    broadcastEvent('stats', downloadEngine.getStats());
-    res.json({ success: true, count, cleared: count });
   });
 
   app.post('/api/downloads/reorder', (req, res) => {
     const { order } = req.body;
     if (Array.isArray(order)) {
       reorderDownloads(order);
-      const all = getAllDownloads();
-      broadcastEvent('queue_updated', all);
-      res.json({ success: true, downloads: all });
+      res.json({ success: true });
     } else {
       res.status(400).json({ error: 'Invalid order array' });
     }
   });
 
-  // 4. File Streaming / In-browser Playback Endpoint with HTTP Range support
+  // 4. File Streaming / In-browser Playback Endpoint
   app.get('/api/downloads/:id/file', (req, res) => {
     const item = getDownloadById(req.params.id);
     if (!item) {
@@ -350,7 +332,7 @@ async function startServer() {
     }
 
     if (!item.outputPath || !fs.existsSync(item.outputPath)) {
-      return res.status(404).json({ error: 'File not found on disk' });
+      return res.status(404).json({ error: 'File not found on disk or still downloading' });
     }
 
     const stat = fs.statSync(item.outputPath);
@@ -364,31 +346,26 @@ async function startServer() {
     else if (ext === '.mkv') contentType = 'video/x-matroska';
     else if (ext === '.mp3') contentType = 'audio/mpeg';
     else if (ext === '.m4a') contentType = 'audio/mp4';
-    else if (ext === '.flac') contentType = 'audio/flac';
-    else if (ext === '.wav') contentType = 'audio/wav';
-    else if (ext === '.ogg') contentType = 'audio/ogg';
-    else if (ext === '.zip') contentType = 'application/zip';
 
+    // Support partial range for video scrubbing
     if (range) {
-      const parts = range.replace(/bytes=/, '').split('-');
+      const parts = range.replace(/bytes=/, "").split("-");
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-      const chunksize = end - start + 1;
+      const chunksize = (end - start) + 1;
       const file = fs.createReadStream(item.outputPath, { start, end });
-
       res.writeHead(206, {
         'Content-Range': `bytes ${start}-${end}/${fileSize}`,
         'Accept-Ranges': 'bytes',
         'Content-Length': chunksize,
-        'Content-Type': contentType
+        'Content-Type': contentType,
       });
       file.pipe(res);
     } else {
       res.writeHead(200, {
         'Content-Length': fileSize,
         'Content-Type': contentType,
-        'Accept-Ranges': 'bytes',
-        'Content-Disposition': `inline; filename="${encodeURIComponent(item.fileName || path.basename(item.outputPath))}"`
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(item.fileName || path.basename(item.outputPath))}"`,
       });
       fs.createReadStream(item.outputPath).pipe(res);
     }
@@ -419,7 +396,68 @@ async function startServer() {
     });
   });
 
-  // 6. Settings Endpoints
+  // 5b. File Integrity Checksum (MD5, SHA-256, SHA-1)
+  app.get('/api/downloads/:id/checksum', async (req, res) => {
+    try {
+      const item = getDownloadById(req.params.id);
+      if (!item) {
+        return res.status(404).json({ error: 'Download record not found' });
+      }
+
+      let targetFile = item.outputPath || '';
+      if (!targetFile || !fs.existsSync(targetFile)) {
+        if (targetFile && fs.existsSync(path.resolve(targetFile))) {
+          targetFile = path.resolve(targetFile);
+        } else if (item.fileName) {
+          const settings = getSettings();
+          const candidate = path.join(settings.downloadDirectory, item.fileName);
+          if (fs.existsSync(candidate)) {
+            targetFile = candidate;
+          }
+        }
+      }
+
+      if (!targetFile || !fs.existsSync(targetFile)) {
+        return res.status(400).json({ error: 'File does not exist on disk or has not finished downloading' });
+      }
+
+      const algo = (req.query.algo as string || 'sha256').toLowerCase();
+      if (!['md5', 'sha256', 'sha1'].includes(algo)) {
+        return res.status(400).json({ error: 'Supported hash algorithms: md5, sha256, sha1' });
+      }
+
+      const hash = crypto.createHash(algo);
+      const stream = fs.createReadStream(targetFile);
+
+      await new Promise<void>((resolve, reject) => {
+        stream.on('data', (chunk) => hash.update(chunk));
+        stream.on('end', () => resolve());
+        stream.on('error', (err) => reject(err));
+      });
+
+      const digest = hash.digest('hex');
+      const stat = fs.statSync(targetFile);
+
+      res.json({
+        id: item.id,
+        algorithm: algo.toUpperCase(),
+        hash: digest,
+        fileSize: stat.size,
+        fileName: path.basename(targetFile),
+        verifiedAt: new Date().toISOString()
+      });
+    } catch (err: any) {
+      log('ERROR', `Checksum calculation failed: ${err.message}`);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 6. Stats Endpoint
+  app.get('/api/stats', (req, res) => {
+    res.json(downloadEngine.getStats());
+  });
+
+  // 7. Settings Endpoints
   app.get('/api/settings', (req, res) => {
     res.json(getSettings());
   });
@@ -427,61 +465,85 @@ async function startServer() {
   app.post('/api/settings', (req, res) => {
     const result = saveSettings(req.body);
     if (result.success) {
-      broadcastEvent('settings_updated', result.settings);
+      downloadEngine.checkAndProcessQueue();
       res.json(result.settings);
     } else {
-      res.status(400).json({ error: result.error || 'Failed to update settings' });
+      res.status(400).json({ error: result.error });
     }
   });
 
   app.post('/api/settings/reset', (req, res) => {
-    const settings = resetSettings();
-    broadcastEvent('settings_updated', settings);
-    res.json(settings);
+    const reset = resetSettings();
+    res.json(reset);
   });
 
-  // 7. System & Folder Validation
-  app.post('/api/system/check-folder', (req, res) => {
-    const folderPath = req.body.folderPath || req.body.directory || req.body.path;
-    if (!folderPath) {
-      return res.status(400).json({ valid: false, error: 'Path is required' });
-    }
-
-    const check = verifyAndResolveDirectory(folderPath);
-    res.json(check);
-  });
-
-  // 8. Stats Endpoint
-  app.get('/api/stats', (req, res) => {
-    res.json(downloadEngine.getStats());
-  });
-
-  // 9. Logs Endpoints
+  // 8. Logs Endpoints
   app.get('/api/logs', (req, res) => {
-    res.json(getLogs());
+    const limit = parseInt(req.query.limit as string) || 200;
+    const level = req.query.level as string;
+    const search = req.query.search as string;
+    res.json(getLogs(limit, level, search));
   });
 
-  app.post('/api/logs/clear', (req, res) => {
+  app.get('/api/logs/export', (req, res) => {
+    const all = getLogs(1000);
+    const text = all
+      .map(
+        (l) =>
+          `[${l.timestamp}] [${l.level.padEnd(5)}] ${l.message} ${
+            l.details ? JSON.stringify(l.details) : ''
+          }`
+      )
+      .join('\n');
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="videoflow_logs_${Date.now()}.txt"`
+    );
+    res.send(text);
+  });
+
+  app.delete('/api/logs', (req, res) => {
     clearLogs();
-    broadcastEvent('logs_cleared', {});
+    broadcastEvent('logs_cleared', { success: true });
     res.json({ success: true });
   });
 
-  // 10. Cookies Management
-  const COOKIES_PATH = path.join(process.cwd(), 'data', 'cookies.txt');
+  // 9. Folder Verification
+  app.post('/api/system/check-folder', (req, res) => {
+    const { folderPath } = req.body;
+    if (!folderPath) {
+      return res.status(400).json({ valid: false, error: 'Path required' });
+    }
 
+    try {
+      const resolved = path.resolve(folderPath);
+      if (!fs.existsSync(resolved)) {
+        fs.mkdirSync(resolved, { recursive: true });
+      }
+      // Test write permission
+      const testFile = path.join(resolved, `.write_test_${Date.now()}`);
+      fs.writeFileSync(testFile, 'ok');
+      fs.unlinkSync(testFile);
+
+      res.json({ valid: true, path: resolved });
+    } catch (err: any) {
+      res.status(400).json({ valid: false, error: `Invalid folder or permission denied: ${err.message}` });
+    }
+  });
+
+  // 10. Cookies Management for YouTube Auth
+  const COOKIES_PATH = path.join(process.cwd(), 'data', 'cookies.txt');
   app.get('/api/cookies', (req, res) => {
     const exists = fs.existsSync(COOKIES_PATH);
+    let size = 0;
+    let modifiedAt: string | undefined;
     if (exists) {
       const stat = fs.statSync(COOKIES_PATH);
-      res.json({
-        hasCookies: true,
-        size: stat.size,
-        modifiedAt: stat.mtime.toISOString()
-      });
-    } else {
-      res.json({ hasCookies: false, size: 0 });
+      size = stat.size;
+      modifiedAt = stat.mtime.toISOString();
     }
+    res.json({ hasCookies: exists, size, modifiedAt });
   });
 
   app.post('/api/cookies', (req, res) => {
@@ -490,10 +552,9 @@ async function startServer() {
       if (!content || typeof content !== 'string') {
         return res.status(400).json({ error: 'Cookie content is required' });
       }
-
-      fs.writeFileSync(COOKIES_PATH, content, 'utf-8');
-      log('INFO', 'cookies.txt updated');
-      res.json({ success: true });
+      fs.writeFileSync(COOKIES_PATH, content.trim(), 'utf-8');
+      log('INFO', `Custom cookies.txt saved (${content.length} characters)`);
+      res.json({ success: true, size: fs.statSync(COOKIES_PATH).size });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -503,6 +564,7 @@ async function startServer() {
     try {
       if (fs.existsSync(COOKIES_PATH)) {
         fs.unlinkSync(COOKIES_PATH);
+        log('INFO', 'Custom cookies.txt removed');
       }
       res.json({ success: true });
     } catch (err: any) {
@@ -510,19 +572,25 @@ async function startServer() {
     }
   });
 
-  // 11. Archive Management (Compression / Extraction / Inspection)
+  // 11. Archive Management (Compress & Extract)
   app.post('/api/archive/compress', async (req, res) => {
     try {
-      const { fileIds, archiveName = 'MyArchive', level = 6 } = req.body;
-      if (!Array.isArray(fileIds) || fileIds.length === 0) {
-        return res.status(400).json({ error: 'At least one file ID is required' });
+      const { fileIds, archiveName, level = 6 } = req.body;
+      if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
+        return res.status(400).json({ error: 'fileIds array is required' });
       }
 
       const settings = getSettings();
-      const destDir = settings.downloadDirectory;
-      const safeArchiveName = sanitizeFilename(archiveName, 'Archive');
-      const zipFileName = `${safeArchiveName}.zip`;
-      const zipFilePath = path.join(destDir, zipFileName);
+      const outputDir = settings.downloadDirectory;
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      const cleanArchiveBase = (archiveName || `Archive_${Date.now()}`)
+        .replace(/[/\\?%*:|"<>]/g, '_')
+        .replace(/\.zip$/i, '');
+      const zipFileName = `${cleanArchiveBase}.zip`;
+      const zipFilePath = path.join(outputDir, zipFileName);
 
       const itemsToZip: { path: string; name: string }[] = [];
       for (const id of fileIds) {
@@ -530,7 +598,7 @@ async function startServer() {
         if (item && item.outputPath && fs.existsSync(item.outputPath)) {
           itemsToZip.push({
             path: item.outputPath,
-            name: item.fileName || path.basename(item.outputPath)
+            name: path.basename(item.outputPath)
           });
         }
       }
@@ -542,7 +610,7 @@ async function startServer() {
       log('INFO', `Creating ZIP archive "${zipFileName}" with ${itemsToZip.length} files...`);
 
       const output = fs.createWriteStream(zipFilePath);
-      const archive = new ZipArchive({
+      const archive = archiver('zip', {
         zlib: { level: Math.min(9, Math.max(0, level)) }
       });
 
@@ -563,7 +631,7 @@ async function startServer() {
         id: `archive_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         url: `file://${zipFilePath}`,
         title: zipFileName,
-        uploader: 'VideoFlow Archive Manager',
+        uploader: 'Free Download Manager (Archiver)',
         thumbnail: '',
         status: 'COMPLETED',
         progress: 100,
@@ -602,24 +670,12 @@ async function startServer() {
 
       const zip = new AdmZip(item.outputPath);
       const destDir = outputDir || path.join(path.dirname(item.outputPath), path.parse(item.outputPath).name);
-      const resolvedDest = path.resolve(destDir);
-
-      if (!fs.existsSync(resolvedDest)) {
-        fs.mkdirSync(resolvedDest, { recursive: true });
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
       }
 
-      // Security: Zip Slip path traversal check
+      zip.extractAllTo(destDir, true);
       const entries = zip.getEntries();
-      for (const entry of entries) {
-        const entryDest = path.resolve(resolvedDest, entry.entryName);
-        if (!entryDest.startsWith(resolvedDest)) {
-          return res.status(400).json({
-            error: `Security violation: Archive entry "${entry.entryName}" attempts path traversal outside target directory.`
-          });
-        }
-      }
-
-      zip.extractAllTo(resolvedDest, true);
 
       if (deleteSource) {
         try {
@@ -631,10 +687,10 @@ async function startServer() {
         }
       }
 
-      log('INFO', `Extracted ${entries.length} items from "${item.title}" to ${resolvedDest}`);
+      log('INFO', `Extracted ${entries.length} items from "${item.title}" to ${destDir}`);
       res.json({
         success: true,
-        extractedTo: resolvedDest,
+        extractedTo: destDir,
         entryCount: entries.length,
         entries: entries.map(e => ({ name: e.entryName, isDirectory: e.isDirectory, size: e.header.size }))
       });
@@ -674,21 +730,12 @@ async function startServer() {
         return res.status(400).json({ error: 'URL is required for audio extraction' });
       }
 
-      let audioTitle = title?.trim();
-      if (!audioTitle) {
-        try {
-          const parsed = new URL(url);
-          audioTitle = path.basename(parsed.pathname) || 'Extracted Audio Track';
-        } catch {
-          audioTitle = 'Extracted Audio Track';
-        }
-      }
-
+      const audioTitle = title || `Audio_${Date.now()}`;
       const newItem: DownloadItem = {
         id: `audio_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         url,
         title: audioTitle,
-        uploader: 'Audio Extraction Pipeline',
+        uploader: 'Audio Extraction Engine',
         thumbnail: '',
         status: 'QUEUED',
         progress: 0,
@@ -703,27 +750,40 @@ async function startServer() {
       };
 
       await downloadEngine.queueDownload(newItem);
-      res.status(201).json({ success: true, item: newItem });
+      res.json(newItem);
     } catch (err: any) {
-      log('ERROR', `Audio extraction setup failed: ${err.message}`);
+      log('ERROR', `Audio extraction failed: ${err.message}`);
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Mount Vite development middlewares in dev mode
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: 'spa'
-  });
-  app.use(vite.middlewares);
+  // 13. Vite Middleware (Dev vs Prod)
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    log('INFO', `VideoFlow Download Manager server listening on http://0.0.0.0:${PORT}`);
-    log('INFO', `Active download directory: ${getSettings().downloadDirectory}`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    log('INFO', `VideoFlow Server running on http://0.0.0.0:${PORT}`);
+  });
+
+  process.on('SIGTERM', () => {
+    log('INFO', 'SIGTERM received, shutting down gracefully...');
+    downloadEngine.shutdown();
+    server.close();
   });
 }
 
 startServer().catch((err) => {
-  console.error('Fatal server startup failure:', err);
+  console.error('Fatal server startup error:', err);
   process.exit(1);
 });

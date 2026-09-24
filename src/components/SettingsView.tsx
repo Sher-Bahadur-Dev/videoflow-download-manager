@@ -266,6 +266,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <p className="text-[11px] text-slate-400">Warn if an identical URL is already present in queue or completed</p>
                   </div>
                 </label>
+
+                <label className="flex items-center space-x-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.monitorClipboard ?? true}
+                    onChange={(e) => handleChange('monitorClipboard', e.target.checked)}
+                    className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-cyan-600 focus:ring-0 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-slate-200 font-medium">Monitor Clipboard for downloadable URLs (IDM style)</span>
+                    <p className="text-[11px] text-slate-400">Prompt to quickly add a download whenever a supported link is copied</p>
+                  </div>
+                </label>
               </div>
             </div>
           )}

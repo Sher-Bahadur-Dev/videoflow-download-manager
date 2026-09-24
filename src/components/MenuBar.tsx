@@ -30,6 +30,7 @@ interface MenuBarProps {
   onOpenAbout: () => void;
   onOpenArchiveModal?: () => void;
   onOpenAudioModal?: () => void;
+  onOpenBatchRename?: () => void;
 }
 
 export const MenuBar: React.FC<MenuBarProps> = ({
@@ -57,7 +58,8 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onOpenShortcuts,
   onOpenAbout,
   onOpenArchiveModal,
-  onOpenAudioModal
+  onOpenAudioModal,
+  onOpenBatchRename
 }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const menuBarRef = useRef<HTMLDivElement>(null);
@@ -193,6 +195,16 @@ export const MenuBar: React.FC<MenuBarProps> = ({
               <span>Delete</span>
               <span className="text-[10px] text-slate-500 font-mono">Del</span>
             </button>
+            {onOpenBatchRename && (
+              <button
+                disabled={!selectedItem}
+                onClick={() => handleItemClick(onOpenBatchRename)}
+                className={`w-full text-left px-3 py-1 flex items-center justify-between ${!selectedItem ? 'opacity-40 cursor-not-allowed' : 'hover:bg-cyan-900/40 hover:text-cyan-200'}`}
+              >
+                <span>Batch Rename...</span>
+                <span className="text-[10px] text-slate-500 font-mono">F2</span>
+              </button>
+            )}
             <div className="h-px bg-slate-800 my-1" />
             <button
               disabled={!selectedItem || !isCompleted}

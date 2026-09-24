@@ -99,6 +99,7 @@ export interface AppSettings {
   notifyOnPause: boolean;
   debugMode: boolean;
   speedLimitKBps: number; // 0 = unlimited
+  monitorClipboard: boolean;
   schedulerEnabled: boolean;
   schedulerStartTime: string;
   schedulerStopTime: string;

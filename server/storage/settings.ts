@@ -90,6 +90,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   notifyOnPause: false,
   debugMode: false,
   speedLimitKBps: 0,
+  monitorClipboard: true,
   schedulerEnabled: false,
   schedulerStartTime: '23:00',
   schedulerStopTime: '07:00',

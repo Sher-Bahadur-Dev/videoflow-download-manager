@@ -22,6 +22,7 @@ import { AddUrlDialog } from './components/AddUrlDialog';
 import { AddBatchDialog } from './components/AddBatchDialog';
 import { PropertiesDialog } from './components/PropertiesDialog';
 import { RenameDialog } from './components/RenameDialog';
+import { BatchRenameDialog } from './components/BatchRenameDialog';
 import { ColumnChooserDialog } from './components/ColumnChooserDialog';
 import { SchedulerDialog } from './components/SchedulerDialog';
 import { ShortcutsDialog } from './components/ShortcutsDialog';
@@ -35,6 +36,7 @@ import { FolderRevealModal } from './components/FolderRevealModal';
 import { VideoPlayerView } from './components/VideoPlayerView';
 import { ArchiveManagerModal } from './components/ArchiveManagerModal';
 import { AudioExtractorModal } from './components/AudioExtractorModal';
+import { Copy, Plus, X } from 'lucide-react';
 import { getCategory } from './utils';
 
 const DEFAULT_STATS: DashboardStats = {
@@ -66,6 +68,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   notifyOnPause: false,
   debugMode: false,
   speedLimitKBps: 0,
+  monitorClipboard: true,
   schedulerEnabled: false,
   schedulerStartTime: '23:00',
   schedulerStopTime: '07:00',
@@ -121,6 +124,9 @@ export function App() {
 
   // Modals & Dialogs
   const [isAddUrlOpen, setIsAddUrlOpen] = useState(false);
+  const [addUrlInitial, setAddUrlInitial] = useState<string>('');
+  const [clipboardDetectedUrl, setClipboardDetectedUrl] = useState<string | null>(null);
+  const lastClipboardUrlRef = useRef<string>('');
   const [isAddBatchOpen, setIsAddBatchOpen] = useState(false);
   const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
   const [isColumnChooserOpen, setIsColumnChooserOpen] = useState(false);
@@ -128,11 +134,14 @@ export function App() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [isAudioModalOpen, setIsAudioModalOpen] = useState(false);
+  const [isBatchRenameOpen, setIsBatchRenameOpen] = useState(false);
+  const [batchRenameItems, setBatchRenameItems] = useState<DownloadItem[]>([]);
   const [archiveInitialItems, setArchiveInitialItems] = useState<DownloadItem[]>([]);
   const [audioInitialItem, setAudioInitialItem] = useState<DownloadItem | null>(null);
 
   const [renameItem, setRenameItem] = useState<DownloadItem | null>(null);
   const [propertiesItem, setPropertiesItem] = useState<DownloadItem | null>(null);
+  const [propertiesTab, setPropertiesTab] = useState<'general' | 'integrity'>('general');
   const [previewItem, setPreviewItem] = useState<DownloadItem | null>(null);
   const [revealInfo, setRevealInfo] = useState<any | null>(null);
 
@@ -200,6 +209,42 @@ export function App() {
       }
     }
   }, [downloads]);
+
+  // IDM Clipboard Monitoring
+  useEffect(() => {
+    if (!settings.monitorClipboard) return;
+
+    const checkClipboard = async () => {
+      try {
+        if (!navigator.clipboard || !navigator.clipboard.readText) return;
+        const text = await navigator.clipboard.readText();
+        const trimmed = text ? text.trim() : '';
+        if (
+          trimmed &&
+          trimmed !== lastClipboardUrlRef.current &&
+          (trimmed.startsWith('http://') || trimmed.startsWith('https://')) &&
+          !trimmed.includes('\n') &&
+          trimmed.length > 10
+        ) {
+          lastClipboardUrlRef.current = trimmed;
+          const exists = downloads.some((d) => d.url === trimmed);
+          if (!exists) {
+            setClipboardDetectedUrl(trimmed);
+          }
+        }
+      } catch {
+        // Tab not focused or user permission pending
+      }
+    };
+
+    window.addEventListener('focus', checkClipboard);
+    const interval = setInterval(checkClipboard, 3500);
+
+    return () => {
+      window.removeEventListener('focus', checkClipboard);
+      clearInterval(interval);
+    };
+  }, [settings.monitorClipboard, downloads]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -354,23 +399,12 @@ export function App() {
       }
     });
 
-    const updateItemInState = (raw: any) => {
-      const item = raw?.item || raw;
-      if (!item || !item.id) return;
-      setDownloads((prev) => {
-        const exists = prev.find((d) => d.id === item.id);
-        if (exists) {
-          return prev.map((d) => (d.id === item.id ? { ...d, ...item } : d));
-        }
-        return [item, ...prev];
-      });
-    };
-
     sse.addEventListener('progress', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        updateItemInState(data);
-        if (data.stats) setStats(data.stats);
+        setDownloads((prev) =>
+          prev.map((d) => (d.id === data.id ? { ...d, ...data } : d))
+        );
       } catch (err) {
         console.error('SSE progress error:', err);
       }
@@ -379,68 +413,15 @@ export function App() {
     sse.addEventListener('status', (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        updateItemInState(data);
+        setDownloads((prev) => {
+          const exists = prev.find((d) => d.id === data.id);
+          if (exists) {
+            return prev.map((d) => (d.id === data.id ? { ...d, ...data } : d));
+          }
+          return [data, ...prev];
+        });
       } catch (err) {
         console.error('SSE status error:', err);
-      }
-    });
-
-    sse.addEventListener('status_change', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        updateItemInState(data);
-        if (data.stats) setStats(data.stats);
-      } catch (err) {
-        console.error('SSE status_change error:', err);
-      }
-    });
-
-    sse.addEventListener('completed', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        updateItemInState(data);
-        if (data.stats) setStats(data.stats);
-      } catch (err) {
-        console.error('SSE completed error:', err);
-      }
-    });
-
-    sse.addEventListener('added', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        updateItemInState(data);
-        if (data.stats) setStats(data.stats);
-      } catch (err) {
-        console.error('SSE added error:', err);
-      }
-    });
-
-    sse.addEventListener('download_added', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        updateItemInState(data);
-      } catch (err) {
-        console.error('SSE download_added error:', err);
-      }
-    });
-
-    sse.addEventListener('removed', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.stats) setStats(data.stats);
-      } catch (err) {
-        console.error('SSE removed error:', err);
-      }
-    });
-
-    sse.addEventListener('download_deleted', (e: MessageEvent) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.id) {
-          setDownloads((prev) => prev.filter((d) => d.id !== data.id));
-        }
-      } catch (err) {
-        console.error('SSE download_deleted error:', err);
       }
     });
 
@@ -734,6 +715,28 @@ export function App() {
     }
   };
 
+  const handleBatchRename = async (renames: { id: string; newTitle: string }[]) => {
+    const res = await fetch('/api/downloads/batch-rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ renames })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Batch rename failed');
+
+    const renameMap = new Map(renames.map((r) => [r.id, r.newTitle]));
+    setDownloads((prev) =>
+      prev.map((d) => {
+        const newTitle = renameMap.get(d.id);
+        return newTitle ? { ...d, title: newTitle } : d;
+      })
+    );
+    if (activeDetailItem && renameMap.has(activeDetailItem.id)) {
+      const newTitle = renameMap.get(activeDetailItem.id)!;
+      setActiveDetailItem((prev) => (prev ? { ...prev, title: newTitle } : null));
+    }
+  };
+
   const handleRevealFolder = async (id: string) => {
     try {
       const res = await fetch(`/api/downloads/${id}/reveal`);
@@ -885,6 +888,15 @@ export function App() {
         onOpenAbout={() => setIsAboutOpen(true)}
         onOpenArchiveModal={() => setIsArchiveModalOpen(true)}
         onOpenAudioModal={() => setIsAudioModalOpen(true)}
+        onOpenBatchRename={() => {
+          const selected = downloads.filter((d) => selectedIds.has(d.id));
+          if (selected.length > 0) {
+            setBatchRenameItems(selected);
+          } else if (activeDetailItem) {
+            setBatchRenameItems([activeDetailItem]);
+          }
+          setIsBatchRenameOpen(true);
+        }}
       />
 
       {/* 3. Utility Toolbar with Speed Limiter & Search */}
@@ -1062,7 +1074,14 @@ export function App() {
             onOpenFolder={(item) => handleRevealFolder(item.id)}
             onRename={(item) => setRenameItem(item)}
             onDelete={handleDelete}
-            onProperties={(item) => setPropertiesItem(item)}
+            onProperties={(item) => {
+              setPropertiesItem(item);
+              setPropertiesTab('general');
+            }}
+            onVerifyIntegrity={(item) => {
+              setPropertiesItem(item);
+              setPropertiesTab('integrity');
+            }}
             onOpenInGrabber={(url) => {
               setGrabUrl(url);
               setMainView('grabber');
@@ -1080,6 +1099,10 @@ export function App() {
               setAudioInitialItem(item);
               setIsAudioModalOpen(true);
             }}
+            onBatchRename={(items) => {
+              setBatchRenameItems(items);
+              setIsBatchRenameOpen(true);
+            }}
             onBatchResume={() => handleBatchResume(activeIds)}
             onBatchPause={() => handleBatchPause(activeIds)}
             onBatchStop={() => handleBatchStop(activeIds)}
@@ -1094,9 +1117,13 @@ export function App() {
       {/* 7. Dialogs & Modals */}
       <AddUrlDialog
         isOpen={isAddUrlOpen}
-        onClose={() => setIsAddUrlOpen(false)}
+        onClose={() => {
+          setIsAddUrlOpen(false);
+          setAddUrlInitial('');
+        }}
         onAddDownload={handleAddDownload}
         defaultDirectory={settings.downloadDirectory}
+        initialUrl={addUrlInitial}
       />
 
       <AddBatchDialog
@@ -1110,6 +1137,7 @@ export function App() {
         onClose={() => setPropertiesItem(null)}
         onOpenFile={handleOpenFile}
         onOpenFolder={(item) => handleRevealFolder(item.id)}
+        initialTab={propertiesTab}
       />
 
       <RenameDialog
@@ -1162,13 +1190,15 @@ export function App() {
         onDeleteSelected={(deleteFile) => handleBatchDelete(deleteFile)}
         onSelectAll={handleSelectAll}
         onClearSelection={handleClearSelection}
-        onSwitchView={(view) => {
+        onSwitchView={(view: MainView) => {
           setMainView(view);
           if (view === 'grabber') setCurrentFilter('view_grabber');
           else if (view === 'history') setCurrentFilter('view_history');
           else if (view === 'logs') setCurrentFilter('view_logs');
           else if (view === 'queue') setCurrentFilter('view_queue');
           else if (view === 'settings') setCurrentFilter('view_settings');
+          else if (view === 'archive') setIsArchiveModalOpen(true);
+          else if (view === 'audio_tool') setIsAudioModalOpen(true);
           else setCurrentFilter('all');
         }}
         selectedCount={selectedIds.size}
@@ -1207,7 +1237,7 @@ export function App() {
           setArchiveInitialItems([]);
         }}
         downloads={downloads}
-        selectedIds={new Set(archiveInitialItems.map((d) => d.id))}
+        selectedIds={new Set(archiveInitialItems.map((i) => i.id))}
         onRefreshDownloads={fetchInitialData}
       />
 
@@ -1218,10 +1248,65 @@ export function App() {
           setIsAudioModalOpen(false);
           setAudioInitialItem(null);
         }}
-        initialUrl={audioInitialItem?.url || ''}
-        initialTitle={audioInitialItem?.title || ''}
         onAudioQueued={fetchInitialData}
+        initialUrl={audioInitialItem?.url}
+        initialTitle={audioInitialItem?.title}
       />
+
+      {/* Batch Rename Modal */}
+      <BatchRenameDialog
+        isOpen={isBatchRenameOpen}
+        onClose={() => {
+          setIsBatchRenameOpen(false);
+          setBatchRenameItems([]);
+        }}
+        items={
+          batchRenameItems.length > 0
+            ? batchRenameItems
+            : downloads.filter((d) => selectedIds.has(d.id))
+        }
+        onBatchRename={handleBatchRename}
+      />
+
+      {/* IDM Clipboard Monitor Toast */}
+      {clipboardDetectedUrl && (
+        <div className="fixed bottom-9 right-4 z-40 bg-[#0e1626] border border-cyan-700/80 rounded-lg shadow-2xl p-3 max-w-sm flex flex-col space-y-2 text-xs text-slate-200 animate-in slide-in-from-bottom-2 duration-200 font-sans">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-1.5 text-cyan-400 font-semibold text-[11px]">
+              <Copy className="w-3.5 h-3.5" />
+              <span>Downloadable URL Copied</span>
+            </div>
+            <button
+              onClick={() => setClipboardDetectedUrl(null)}
+              className="p-0.5 text-slate-400 hover:text-white rounded cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <p className="text-[11px] font-mono text-slate-300 truncate bg-slate-900/90 p-1.5 rounded border border-slate-800 select-all">
+            {clipboardDetectedUrl}
+          </p>
+          <div className="flex items-center justify-end space-x-2 pt-1">
+            <button
+              onClick={() => setClipboardDetectedUrl(null)}
+              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] cursor-pointer"
+            >
+              Dismiss
+            </button>
+            <button
+              onClick={() => {
+                setAddUrlInitial(clipboardDetectedUrl);
+                setIsAddUrlOpen(true);
+                setClipboardDetectedUrl(null);
+              }}
+              className="px-3 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-[11px] flex items-center space-x-1 shadow-sm cursor-pointer"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Download</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

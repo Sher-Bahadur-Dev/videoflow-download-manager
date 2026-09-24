@@ -28,6 +28,7 @@ interface AddUrlDialogProps {
     formatId?: string;
   }) => Promise<void>;
   defaultDirectory?: string;
+  initialUrl?: string;
 }
 
 const SAMPLE_URLS = [
@@ -52,12 +53,20 @@ export const AddUrlDialog: React.FC<AddUrlDialogProps> = ({
   isOpen,
   onClose,
   onAddDownload,
-  defaultDirectory = 'downloads/'
+  defaultDirectory = 'downloads/',
+  initialUrl = ''
 }) => {
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState(initialUrl);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialUrl) setUrl(initialUrl);
+      setError(null);
+    }
+  }, [isOpen, initialUrl]);
 
   const [selectedFormatId, setSelectedFormatId] = useState<string>('');
   const [selectedContainer, setSelectedContainer] = useState<string>('mp4');

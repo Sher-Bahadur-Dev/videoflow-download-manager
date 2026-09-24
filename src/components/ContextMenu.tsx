@@ -18,7 +18,9 @@ import {
   XSquare,
   Archive,
   FileArchive,
-  Music
+  Music,
+  Edit3,
+  ShieldCheck
 } from 'lucide-react';
 
 interface ContextMenuProps {
@@ -40,6 +42,8 @@ interface ContextMenuProps {
   onCompress?: (items: DownloadItem[]) => void;
   onExtract?: (item: DownloadItem) => void;
   onExtractAudio?: (item: DownloadItem) => void;
+  onBatchRename?: (items: DownloadItem[]) => void;
+  onVerifyIntegrity?: (item: DownloadItem) => void;
   // Batch operation props for multiple selection (consistent with IDM)
   selectedCount?: number;
   selectedItems?: DownloadItem[];
@@ -71,6 +75,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onCompress,
   onExtract,
   onExtractAudio,
+  onBatchRename,
+  onVerifyIntegrity,
   selectedCount = 1,
   selectedItems = [],
   onBatchResume,
@@ -240,6 +246,20 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             <span className="text-[10px] font-mono text-rose-400">({selectedCount})</span>
           </button>
 
+          {/* Batch Rename */}
+          {onBatchRename && (
+            <button
+              onClick={() => handleAction(() => onBatchRename(selectedItems))}
+              className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between text-slate-200 cursor-pointer"
+            >
+              <div className="flex items-center space-x-2">
+                <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Batch Rename...</span>
+              </div>
+              <span className="text-[10px] font-mono text-cyan-400">({selectedCount})</span>
+            </button>
+          )}
+
           {/* Batch Compress to ZIP */}
           {onCompress && (
             <button
@@ -253,6 +273,23 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
               <span className="text-[10px] font-mono text-cyan-400">({selectedCount})</span>
             </button>
           )}
+
+          {/* Copy All Download URLs */}
+          <button
+            onClick={() =>
+              handleAction(() => {
+                const urls = selectedItems.map((i) => i.url).filter(Boolean).join('\n') || item.url;
+                navigator.clipboard.writeText(urls);
+              })
+            }
+            className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between text-slate-200 cursor-pointer"
+          >
+            <div className="flex items-center space-x-2">
+              <Copy className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Copy Download URLs</span>
+            </div>
+            <span className="text-[10px] font-mono text-cyan-400">({selectedCount})</span>
+          </button>
 
           <div className="h-px bg-slate-800 my-1" />
 
@@ -313,6 +350,15 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             <Info className="w-3.5 h-3.5 text-slate-400" />
             <span>Properties...</span>
           </button>
+          {onVerifyIntegrity && isCompleted && (
+            <button
+              onClick={() => handleAction(() => onVerifyIntegrity(item))}
+              className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center space-x-2 text-cyan-300 cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Verify Integrity (MD5 / SHA-256)...</span>
+            </button>
+          )}
         </>
       ) : (
         /* 2. SINGLE ITEM MODE MENU */
@@ -428,7 +474,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             </button>
           )}
 
-          {/* Copy URL */}
+          {/* Copy Download URL */}
           <button
             onClick={() =>
               handleAction(() => {
@@ -437,8 +483,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             }
             className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center space-x-2 cursor-pointer"
           >
-            <Copy className="w-3.5 h-3.5 text-slate-400" />
-            <span>Copy URL</span>
+            <Copy className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Copy Download URL</span>
           </button>
 
           {/* Copy File Path */}
@@ -456,6 +502,17 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             </button>
           )}
 
+          {/* File Integrity Verification */}
+          {onVerifyIntegrity && isCompleted && (
+            <button
+              onClick={() => handleAction(() => onVerifyIntegrity(item))}
+              className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center space-x-2 text-cyan-300 cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Verify Integrity (MD5 / SHA-256)...</span>
+            </button>
+          )}
+
           <div className="h-px bg-slate-800 my-1" />
 
           {/* Rename */}
@@ -466,6 +523,17 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             <Edit2 className="w-3.5 h-3.5 text-slate-400" />
             <span>Rename...</span>
           </button>
+
+          {/* Batch / Regex Rename */}
+          {onBatchRename && (
+            <button
+              onClick={() => handleAction(() => onBatchRename([item]))}
+              className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center space-x-2 cursor-pointer"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Batch / Regex Rename...</span>
+            </button>
+          )}
 
           {/* Remove from list */}
           <button
