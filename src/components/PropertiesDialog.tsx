@@ -21,6 +21,7 @@ interface PropertiesDialogProps {
   onOpenFile: (item: DownloadItem) => void;
   onOpenFolder: (item: DownloadItem) => void;
   initialTab?: 'general' | 'integrity';
+  initialAlgo?: 'md5' | 'sha256' | 'sha1';
 }
 
 export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({
@@ -28,37 +29,21 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({
   onClose,
   onOpenFile,
   onOpenFolder,
-  initialTab = 'general'
+  initialTab = 'general',
+  initialAlgo = 'sha256'
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'integrity'>(initialTab);
-  const [selectedAlgo, setSelectedAlgo] = useState<'md5' | 'sha256' | 'sha1'>('sha256');
+  const [selectedAlgo, setSelectedAlgo] = useState<'md5' | 'sha256' | 'sha1'>(initialAlgo);
   const [calculatedHash, setCalculatedHash] = useState<string | null>(null);
   const [isHashing, setIsHashing] = useState<boolean>(false);
   const [hashError, setHashError] = useState<string | null>(null);
   const [expectedHash, setExpectedHash] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    setActiveTab(initialTab);
-    setCalculatedHash(null);
-    setHashError(null);
-    setExpectedHash('');
-  }, [item?.id, initialTab]);
-
-  if (!item) return null;
-
-  const isCompleted = item.status === 'COMPLETED';
-
-  const copyToClipboard = (text: string, keyName: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(keyName);
-    setTimeout(() => {
-      setCopiedKey(null);
-    }, 2000);
-  };
+  const isCompleted = item?.status === 'COMPLETED';
 
   const handleComputeChecksum = async (algo: 'md5' | 'sha256' | 'sha1' = selectedAlgo) => {
-    if (!item.id || !isCompleted) return;
+    if (!item?.id || !isCompleted) return;
 
     setIsHashing(true);
     setHashError(null);
@@ -75,6 +60,29 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({
     } finally {
       setIsHashing(false);
     }
+  };
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+    const algo = initialAlgo || 'sha256';
+    setSelectedAlgo(algo);
+    setCalculatedHash(null);
+    setHashError(null);
+    setExpectedHash('');
+
+    if (initialTab === 'integrity' && item && item.status === 'COMPLETED') {
+      handleComputeChecksum(algo);
+    }
+  }, [item?.id, initialTab, initialAlgo]);
+
+  if (!item) return null;
+
+  const copyToClipboard = (text: string, keyName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(keyName);
+    setTimeout(() => {
+      setCopiedKey(null);
+    }, 2000);
   };
 
   const cleanExpected = expectedHash.trim().toLowerCase();

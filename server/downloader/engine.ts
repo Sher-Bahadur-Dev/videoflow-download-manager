@@ -604,6 +604,22 @@ export class DownloadEngine {
           if (now - activeTask.lastEmitTime >= 100) {
             this.aggregateAndEmitProgress(item, activeTask);
           }
+
+          // Enforce global speed limit constraint across active downloads
+          const currentSettings = getSettings();
+          if (currentSettings.speedLimitKBps && currentSettings.speedLimitKBps > 0) {
+            const activeCount = Math.max(1, this.activeTasks.size);
+            const segCount = item.segments?.length || 1;
+            const targetBytesPerMs = (currentSettings.speedLimitKBps * 1024) / (1000 * activeCount * segCount);
+            if (targetBytesPerMs > 0) {
+              const expectedMs = bytesSinceCalc / targetBytesPerMs;
+              const actualMs = now - lastCalcTime;
+              if (expectedMs > actualMs) {
+                const sleepMs = Math.min(expectedMs - actualMs, 200);
+                await new Promise((r) => setTimeout(r, sleepMs));
+              }
+            }
+          }
         }
       }
       seg.status = 'completed';
@@ -687,6 +703,21 @@ export class DownloadEngine {
           activeTask.lastEmitTime = now;
           history.updateDownload(item.id, item);
           this.emitEvent({ type: 'PROGRESS', item, stats: this.getStats() });
+        }
+
+        // Enforce global speed limit constraint across active downloads
+        const currentSettings = getSettings();
+        if (currentSettings.speedLimitKBps && currentSettings.speedLimitKBps > 0) {
+          const activeCount = Math.max(1, this.activeTasks.size);
+          const targetBytesPerMs = (currentSettings.speedLimitKBps * 1024) / (1000 * activeCount);
+          if (targetBytesPerMs > 0) {
+            const expectedMs = bytesSinceLastCalc / targetBytesPerMs;
+            const actualMs = now - speedCalcTime;
+            if (expectedMs > actualMs) {
+              const sleepMs = Math.min(expectedMs - actualMs, 200);
+              await new Promise((r) => setTimeout(r, sleepMs));
+            }
+          }
         }
       }
     }

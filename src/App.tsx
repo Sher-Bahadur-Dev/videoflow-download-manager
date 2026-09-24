@@ -142,8 +142,35 @@ export function App() {
   const [renameItem, setRenameItem] = useState<DownloadItem | null>(null);
   const [propertiesItem, setPropertiesItem] = useState<DownloadItem | null>(null);
   const [propertiesTab, setPropertiesTab] = useState<'general' | 'integrity'>('general');
+  const [propertiesAlgo, setPropertiesAlgo] = useState<'md5' | 'sha256' | 'sha1'>('sha256');
   const [previewItem, setPreviewItem] = useState<DownloadItem | null>(null);
   const [revealInfo, setRevealInfo] = useState<any | null>(null);
+
+  // Real-time download throughput array representing the last 60 seconds of speed fluctuations
+  const [speedData, setSpeedData] = useState<number[]>(() => Array(60).fill(0));
+  const currentSpeedRef = useRef<number>(0);
+
+  useEffect(() => {
+    const current = Math.max(0, stats.currentSpeed || 0);
+    currentSpeedRef.current = current;
+    setSpeedData((prev) => {
+      const next = [...prev];
+      if (next.length === 0) return [current];
+      next[next.length - 1] = current;
+      return next;
+    });
+  }, [stats.currentSpeed]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const current = currentSpeedRef.current;
+      setSpeedData((prev) => {
+        const next = [...prev.slice(1), current];
+        return next.length > 60 ? next.slice(-60) : next;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Context Menu
   const [contextMenu, setContextMenu] = useState<{
@@ -897,6 +924,11 @@ export function App() {
           }
           setIsBatchRenameOpen(true);
         }}
+        onOpenIntegrity={(item) => {
+          setPropertiesItem(item);
+          setPropertiesTab('integrity');
+          setPropertiesAlgo('sha256');
+        }}
       />
 
       {/* 3. Utility Toolbar with Speed Limiter & Search */}
@@ -1049,6 +1081,7 @@ export function App() {
         concurrencyLimit={settings.maxConcurrentDownloads}
         selectedCount={selectedIds.size}
         totalItemsCount={sortedDownloads.length}
+        speedData={speedData}
       />
 
       {/* 6. Context Menu on Right-Click */}
@@ -1077,10 +1110,12 @@ export function App() {
             onProperties={(item) => {
               setPropertiesItem(item);
               setPropertiesTab('general');
+              setPropertiesAlgo('sha256');
             }}
-            onVerifyIntegrity={(item) => {
+            onVerifyIntegrity={(item, algo) => {
               setPropertiesItem(item);
               setPropertiesTab('integrity');
+              if (algo) setPropertiesAlgo(algo);
             }}
             onOpenInGrabber={(url) => {
               setGrabUrl(url);
@@ -1138,6 +1173,7 @@ export function App() {
         onOpenFile={handleOpenFile}
         onOpenFolder={(item) => handleRevealFolder(item.id)}
         initialTab={propertiesTab}
+        initialAlgo={propertiesAlgo}
       />
 
       <RenameDialog

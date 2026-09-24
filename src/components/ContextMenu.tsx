@@ -20,7 +20,8 @@ import {
   FileArchive,
   Music,
   Edit3,
-  ShieldCheck
+  ShieldCheck,
+  Hash
 } from 'lucide-react';
 
 interface ContextMenuProps {
@@ -43,7 +44,7 @@ interface ContextMenuProps {
   onExtract?: (item: DownloadItem) => void;
   onExtractAudio?: (item: DownloadItem) => void;
   onBatchRename?: (items: DownloadItem[]) => void;
-  onVerifyIntegrity?: (item: DownloadItem) => void;
+  onVerifyIntegrity?: (item: DownloadItem, algo?: 'md5' | 'sha256' | 'sha1') => void;
   // Batch operation props for multiple selection (consistent with IDM)
   selectedCount?: number;
   selectedItems?: DownloadItem[];
@@ -277,19 +278,69 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           {/* Copy All Download URLs */}
           <button
             onClick={() =>
-              handleAction(() => {
+              handleAction(async () => {
                 const urls = selectedItems.map((i) => i.url).filter(Boolean).join('\n') || item.url;
-                navigator.clipboard.writeText(urls);
+                try {
+                  await navigator.clipboard.writeText(urls);
+                } catch {
+                  const el = document.createElement('textarea');
+                  el.value = urls;
+                  document.body.appendChild(el);
+                  el.select();
+                  document.execCommand('copy');
+                  document.body.removeChild(el);
+                }
               })
             }
             className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between text-slate-200 cursor-pointer"
           >
             <div className="flex items-center space-x-2">
               <Copy className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Copy Download URLs</span>
+              <span>Copy Download URL{selectedCount > 1 ? 's' : ''}</span>
             </div>
             <span className="text-[10px] font-mono text-cyan-400">({selectedCount})</span>
           </button>
+
+          {/* Multi-Selection File Integrity Verification */}
+          {onVerifyIntegrity && selectedItems.some((i) => i.status === 'COMPLETED') && (
+            <div className="py-0.5 border-t border-slate-800/80 my-0.5">
+              <div className="px-3 py-1 text-[10px] text-slate-400 font-medium flex items-center justify-between">
+                <span className="flex items-center space-x-1.5 text-cyan-400 font-semibold">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Verify File Integrity</span>
+                </span>
+                <span className="text-[9px] text-slate-500 font-mono">Checksum</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1 px-2.5 pb-1">
+                <button
+                  onClick={() =>
+                    handleAction(() => {
+                      const completed = selectedItems.find((i) => i.status === 'COMPLETED') || item;
+                      onVerifyIntegrity(completed, 'sha256');
+                    })
+                  }
+                  title="Check integrity using SHA-256 algorithm"
+                  className="px-2 py-1 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-800/80 text-cyan-200 text-left text-[11px] font-mono flex items-center space-x-1.5 cursor-pointer transition-colors"
+                >
+                  <Hash className="w-3 h-3 text-cyan-400" />
+                  <span>SHA-256</span>
+                </button>
+                <button
+                  onClick={() =>
+                    handleAction(() => {
+                      const completed = selectedItems.find((i) => i.status === 'COMPLETED') || item;
+                      onVerifyIntegrity(completed, 'md5');
+                    })
+                  }
+                  title="Check integrity using MD5 algorithm"
+                  className="px-2 py-1 rounded bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-200 text-left text-[11px] font-mono flex items-center space-x-1.5 cursor-pointer transition-colors"
+                >
+                  <Hash className="w-3 h-3 text-amber-400" />
+                  <span>MD5</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="h-px bg-slate-800 my-1" />
 
@@ -477,8 +528,17 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           {/* Copy Download URL */}
           <button
             onClick={() =>
-              handleAction(() => {
-                navigator.clipboard.writeText(item.url);
+              handleAction(async () => {
+                try {
+                  await navigator.clipboard.writeText(item.url);
+                } catch {
+                  const el = document.createElement('textarea');
+                  el.value = item.url;
+                  document.body.appendChild(el);
+                  el.select();
+                  document.execCommand('copy');
+                  document.body.removeChild(el);
+                }
               })
             }
             className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center space-x-2 cursor-pointer"
@@ -491,8 +551,19 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           {item.outputPath && (
             <button
               onClick={() =>
-                handleAction(() => {
-                  if (item.outputPath) navigator.clipboard.writeText(item.outputPath);
+                handleAction(async () => {
+                  if (item.outputPath) {
+                    try {
+                      await navigator.clipboard.writeText(item.outputPath);
+                    } catch {
+                      const el = document.createElement('textarea');
+                      el.value = item.outputPath;
+                      document.body.appendChild(el);
+                      el.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(el);
+                    }
+                  }
                 })
               }
               className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center space-x-2 cursor-pointer"
@@ -502,15 +573,35 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             </button>
           )}
 
-          {/* File Integrity Verification */}
+          {/* File Integrity Verification with Algorithm Selection */}
           {onVerifyIntegrity && isCompleted && (
-            <button
-              onClick={() => handleAction(() => onVerifyIntegrity(item))}
-              className="w-full text-left px-3 py-1.5 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center space-x-2 text-cyan-300 cursor-pointer"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Verify Integrity (MD5 / SHA-256)...</span>
-            </button>
+            <div className="py-0.5 border-t border-slate-800/80 my-0.5">
+              <div className="px-3 py-1 text-[10px] text-slate-400 font-medium flex items-center justify-between">
+                <span className="flex items-center space-x-1.5 text-cyan-400 font-semibold">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Verify File Integrity</span>
+                </span>
+                <span className="text-[9px] text-slate-500 font-mono">Checksum</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1 px-2.5 pb-1">
+                <button
+                  onClick={() => handleAction(() => onVerifyIntegrity(item, 'sha256'))}
+                  title="Verify file checksum using SHA-256"
+                  className="px-2 py-1 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-800/80 text-cyan-200 text-left text-[11px] font-mono flex items-center space-x-1.5 cursor-pointer transition-colors"
+                >
+                  <Hash className="w-3 h-3 text-cyan-400" />
+                  <span>SHA-256</span>
+                </button>
+                <button
+                  onClick={() => handleAction(() => onVerifyIntegrity(item, 'md5'))}
+                  title="Verify file checksum using MD5"
+                  className="px-2 py-1 rounded bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-200 text-left text-[11px] font-mono flex items-center space-x-1.5 cursor-pointer transition-colors"
+                >
+                  <Hash className="w-3 h-3 text-amber-400" />
+                  <span>MD5</span>
+                </button>
+              </div>
+            </div>
           )}
 
           <div className="h-px bg-slate-800 my-1" />

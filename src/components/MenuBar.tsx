@@ -31,6 +31,7 @@ interface MenuBarProps {
   onOpenArchiveModal?: () => void;
   onOpenAudioModal?: () => void;
   onOpenBatchRename?: () => void;
+  onOpenIntegrity?: (item: DownloadItem) => void;
 }
 
 export const MenuBar: React.FC<MenuBarProps> = ({
@@ -59,7 +60,8 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onOpenAbout,
   onOpenArchiveModal,
   onOpenAudioModal,
-  onOpenBatchRename
+  onOpenBatchRename,
+  onOpenIntegrity
 }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const menuBarRef = useRef<HTMLDivElement>(null);
@@ -222,6 +224,20 @@ export const MenuBar: React.FC<MenuBarProps> = ({
               Open Folder
             </button>
             <div className="h-px bg-slate-800 my-1" />
+            {onOpenIntegrity && (
+              <button
+                disabled={!selectedItem || selectedItem.status !== 'COMPLETED'}
+                onClick={() => selectedItem && handleItemClick(() => onOpenIntegrity(selectedItem))}
+                className={`w-full text-left px-3 py-1 flex items-center justify-between ${
+                  !selectedItem || selectedItem.status !== 'COMPLETED'
+                    ? 'opacity-40 cursor-not-allowed'
+                    : 'hover:bg-cyan-900/40 hover:text-cyan-200'
+                }`}
+              >
+                <span>Verify File Integrity...</span>
+                <span className="text-[10px] text-slate-500 font-mono">MD5/SHA</span>
+              </button>
+            )}
             <button
               disabled={!selectedItem}
               onClick={() => selectedItem && handleItemClick(() => onOpenProperties(selectedItem))}
@@ -318,6 +334,18 @@ export const MenuBar: React.FC<MenuBarProps> = ({
               >
                 <span>Archive Manager (ZIP)...</span>
                 <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-950 text-emerald-300 font-mono">Archive</span>
+              </button>
+            )}
+            {onOpenIntegrity && (
+              <button
+                disabled={!selectedItem || selectedItem.status !== 'COMPLETED'}
+                onClick={() => selectedItem && handleItemClick(() => onOpenIntegrity(selectedItem))}
+                className={`w-full text-left px-3 py-1 hover:bg-cyan-900/40 hover:text-cyan-200 flex items-center justify-between ${
+                  !selectedItem || selectedItem.status !== 'COMPLETED' ? 'opacity-40 cursor-not-allowed' : ''
+                }`}
+              >
+                <span>Verify File Integrity (MD5/SHA)...</span>
+                <span className="text-[9px] px-1 py-0.2 rounded bg-cyan-950 text-cyan-300 font-mono">Checksum</span>
               </button>
             )}
             <div className="h-px bg-slate-800 my-1" />

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   Plus,
   ListPlus,
@@ -59,6 +59,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   const isDownloading = selectedItem?.status === 'DOWNLOADING';
   const isPaused = selectedItem?.status === 'PAUSED';
   const hasSelection = selectedCount > 0;
+
+  const isLimiterActive = speedLimitKBps > 0;
+  const lastLimitRef = useRef<number>(speedLimitKBps > 0 ? speedLimitKBps : 2048);
+
+  useEffect(() => {
+    if (speedLimitKBps > 0) {
+      lastLimitRef.current = speedLimitKBps;
+    }
+  }, [speedLimitKBps]);
+
+  const handleToggleLimiter = () => {
+    if (isLimiterActive) {
+      onSpeedLimitChange(0);
+    } else {
+      onSpeedLimitChange(lastLimitRef.current || 2048);
+    }
+  };
 
   const getSpeedLabel = (kbps: number) => {
     if (!kbps || kbps === 0) return 'Unlimited';
@@ -190,21 +207,65 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
         <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
 
-        {/* Speed Limiter selector */}
-        <div className="hidden lg:flex items-center space-x-1 text-slate-300">
-          <Gauge className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-          <span className="text-[11px] text-slate-400">Limit:</span>
+        {/* Global Download Speed Limiter Switch & Preset Dropdown */}
+        <div className="flex items-center space-x-1.5 text-slate-300 bg-[#090e18]/80 px-2 py-1 rounded border border-slate-800/90 shadow-xs" title="Download Speed Limiter">
+          <label className="flex items-center space-x-1.5 cursor-pointer select-none">
+            <Gauge className={`w-3.5 h-3.5 ${isLimiterActive ? 'text-cyan-400 animate-pulse' : 'text-slate-400'}`} />
+            <span className="hidden sm:inline font-mono text-[11px] font-medium text-slate-300 whitespace-nowrap">
+              Speed Limiter:
+            </span>
+            {/* Download Speed Limiter Switch */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isLimiterActive}
+              onClick={handleToggleLimiter}
+              title={
+                isLimiterActive
+                  ? `Download Speed Limiter is ON (${getSpeedLabel(speedLimitKBps)} global cap). Click to turn OFF (Unlimited).`
+                  : 'Download Speed Limiter is OFF. Click to turn ON.'
+              }
+              className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border transition-colors duration-150 ease-in-out focus:outline-none ${
+                isLimiterActive ? 'bg-cyan-600 border-cyan-400 ring-1 ring-cyan-500/30' : 'bg-slate-700/80 border-slate-600'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow-xs transition duration-150 ease-in-out mt-[0.5px] ${
+                  isLimiterActive ? 'translate-x-3 bg-cyan-100' : 'translate-x-0.5 bg-slate-300'
+                }`}
+              />
+            </button>
+            <span className={`text-[10px] font-mono font-semibold hidden md:inline ${isLimiterActive ? 'text-emerald-400' : 'text-slate-500'}`}>
+              {isLimiterActive ? 'ON' : 'OFF'}
+            </span>
+          </label>
+
+          {/* Download Speed Limiter Preset Dropdown */}
           <select
             value={speedLimitKBps}
-            onChange={(e) => onSpeedLimitChange(Number(e.target.value))}
-            className="bg-[#121927] border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 text-[11px] focus:outline-none focus:border-cyan-500"
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              if (val > 0) lastLimitRef.current = val;
+              onSpeedLimitChange(val);
+            }}
+            title="Download Speed Limiter presets (e.g. 50KB/s, 100KB/s, Unlimited)"
+            aria-label="Download Speed Limiter preset"
+            className="bg-[#121927] border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 text-[11px] focus:outline-none focus:border-cyan-500 cursor-pointer font-mono"
           >
             <option value={0}>Unlimited</option>
+            <option value={50}>50 KB/s</option>
+            <option value={100}>100 KB/s</option>
+            <option value={256}>256 KB/s</option>
             <option value={500}>500 KB/s</option>
             <option value={1024}>1 MB/s</option>
             <option value={2048}>2 MB/s</option>
             <option value={5120}>5 MB/s</option>
             <option value={10240}>10 MB/s</option>
+            <option value={20480}>20 MB/s</option>
+            <option value={51200}>50 MB/s</option>
+            {speedLimitKBps > 0 && ![50, 100, 256, 500, 1024, 2048, 5120, 10240, 20480, 51200].includes(speedLimitKBps) && (
+              <option value={speedLimitKBps}>Custom ({getSpeedLabel(speedLimitKBps)})</option>
+            )}
           </select>
         </div>
       </div>
